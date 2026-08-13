@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block titolo %}Impostazioni — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Impostazioni</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('statistiche.vista') }}">‹ Statistiche</a>
+</div>
+
+<section class="scheda-card">
+  <form class="form-griglia" method="post">
+    <label>Recupero di default (secondi)
+      <input type="number" name="timer_default_sec" value="{{ timer_default }}" min="5" max="900" inputmode="numeric">
+    </label>
+    <label>Allenamenti per l'analisi AI
+      <input type="number" name="analisi_n_sessioni" value="{{ n_default }}" min="1" max="100" inputmode="numeric">
+    </label>
+    <div class="azioni larga">
+      <button class="btn btn-primario" type="submit">Salva</button>
+    </div>
+  </form>
+  <p class="aiuto">
+    Il recupero di default vale per tutti gli esercizi che non ne hanno uno proprio.
+    Puoi impostarne uno specifico dal dettaglio di ogni scheda.
+  </p>
+</section>
+
+<section class="scheda-card">
+  <h2>Assistente AI</h2>
+  {% if ai_disponibile %}
+    <p class="avviso avviso-ok">
+      Attivo con <strong>{{ etichetta_provider }}</strong> — modello <code>{{ modello_attivo }}</code>.
+    </p>
+  {% else %}
+    <p class="avviso">
+      Nessuna chiave trovata: la sezione assistente è nascosta. Copia
+      <code>.env.example</code> in <code>.env</code>, inserisci
+      <code>ANTHROPIC_API_KEY</code> oppure <code>GEMINI_API_KEY</code> e riavvia l'app.
+    </p>
+  {% endif %}
+
+  {% if gruppi_modelli %}
+    <form class="form-griglia" method="post">
+      <label class="larga">Modello
+        <select name="ai_modello">
+          <option value="" {{ "selected" if not modello_scelto }}>
+            Automatico — il primo provider configurato
+          </option>
+          {% for gruppo in gruppi_modelli %}
+            <optgroup label="{{ gruppo.etichetta }}{{ ' — non raggiungibile' if not gruppo.raggiungibile }}">
+              {% for m in gruppo.modelli %}
+                <option value="{{ m.chiave }}" {{ "selected" if m.chiave == modello_scelto }}>
+                  {{ m.etichetta }}{% if m.note %} — {{ m.note }}{% endif %}
+                </option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="azioni larga">
+        <button class="btn btn-primario" type="submit">Cambia modello</button>
+      </div>
+    </form>
+    <p class="aiuto">
+      Il cambio vale dal messaggio successivo, senza riavviare l'app, e lo stesso
+      elenco è disponibile dalla barra della chat. Con <em>Automatico</em> vale
+      l'ordine di sempre: prima Anthropic, poi Gemini, poi il modello locale.
+      Un provider <em>non raggiungibile</em> resta selezionabile — può essere
+      solo un problema momentaneo di rete o il server locale spento.
+    </p>
+  {% endif %}
+
+  <p class="aiuto">
+    Le chiavi si leggono solo dalle variabili d'ambiente e non vengono mai salvate
+    nel database. Per aggiungere un provider metti la sua chiave in <code>.env</code>
+    (<code>ANTHROPIC_API_KEY</code>, <code>GEMINI_API_KEY</code>) e riavvia l'app:
+    i suoi modelli compaiono da soli in questo elenco.
+  </p>
+</section>
+
+{% if stato_ollama.configurato %}
+<section class="scheda-card">
+  <h2>Provider locale (Ollama)</h2>
+  {% if stato_ollama.server_attivo and stato_ollama.modello_presente %}
+    <p class="avviso avviso-ok">
+      Server acceso su <code>{{ stato_ollama.host }}</code> — modello
+      <code>{{ stato_ollama.modello }}</code> disponibile.
+    </p>
+  {% elif stato_ollama.server_attivo %}
+    <p class="avviso">
+      Il server risponde su <code>{{ stato_ollama.host }}</code> ma non trova il
+      modello <code>{{ stato_ollama.modello }}</code>. Scaricalo con
+      <code>ollama pull {{ stato_ollama.modello }}</code>, oppure imposta
+      <code>OLLAMA_MODEL</code> su uno di quelli presenti:
+      {% for m in stato_ollama.modelli_disponibili %}<code>{{ m.nome }}</code>{{ ", " if not loop.last }}{% endfor %}.
+    </p>
+  {% else %}
+    <p class="avviso" id="stato-ollama">
+      Server spento: il provider locale non può rispondere.
+    </p>
+  {% endif %}
+
+  {% if stato_ollama.server_attivo %}
+    <form class="form-griglia" method="post">
+      {# Distinto dal selettore qui sopra: quello dice chi risponde, questo
+         quale modello locale sia — anche solo da riserva, che e' l'unico modo
+         per sceglierlo quando a rispondere e' un provider remoto. #}
+      <label class="larga">Modello locale (anche da riserva)
+        <select name="ollama_modello">
+          {# L'opzione "predefinito" c'e' solo se .env ne indica uno: senza,
+             sceglierla spegnerebbe il provider locale e farebbe sparire questa
+             stessa sezione, selettore compreso. #}
+          {% if stato_ollama.modello_predefinito %}
+            <option value="" {{ "selected" if not stato_ollama.modello_scelto }}>
+              Predefinito da .env ({{ stato_ollama.modello_predefinito }})
+            </option>
+          {% endif %}
+          {% for m in stato_ollama.modelli_disponibili %}
+            <option value="{{ m.nome }}" {{ "selected" if m.nome == stato_ollama.modello_scelto }}>
+              {{ m.nome }}{% if m.dimensione_gb %} — {{ m.dimensione_gb|numero }} GB{% endif %}{% if not m.strumenti %} — senza strumenti{% endif %}{% if m.ragionamento %} — ragionamento, sconsigliato{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="azioni larga">
+        <button class="btn btn-primario" type="submit">Cambia modello</button>
+      </div>
+    </form>
+    <p class="aiuto">
+      Il cambio vale dal messaggio successivo, senza riavviare l'app: il modello che
+      lascia il posto viene tolto subito dalla memoria. Guarda la dimensione accanto al
+      nome — è quella che deve entrare nella scheda video. Un modello
+      <em>senza strumenti</em> può solo rispondere a domande: non riuscirà mai a
+      modificare schede o allenamenti. Anche fra quelli che li supportano, i più
+      piccoli a volte descrivono la modifica invece di eseguirla: in quel caso
+      l'app li sollecita una volta e, se non basta, te lo dice sotto la risposta.
+    </p>
+  {% endif %}
+
+  <p class="aiuto">
+    Il modello resta in memoria {{ stato_ollama.keep_alive }} dopo l'ultima risposta,
+    poi viene scaricato: l'app si usa mentre il computer serve anche ad altro. Una
+    risposta ha al massimo {{ stato_ollama.timeout }} secondi di tempo.
+  </p>
+  <p class="aiuto">
+    Scegli un modello che entri nella memoria della scheda video: se non ci sta,
+    Ollama ne mette una parte nella RAM di sistema e la risposta diventa lenta.
+    Il numero di allenamenti inviati viene ridotto in automatico quando supera la
+    finestra di contesto ({{ stato_ollama.num_ctx }} token), così le istruzioni non
+    vengono tagliate.
+  </p>
+</section>
+{% endif %}
+
+<section class="scheda-card">
+  <h2>Uso da telefono</h2>
+  <p class="aiuto">
+    Avvia l'app con <code>WORKOUT_HOST=0.0.0.0</code> (già impostato in <code>.env.example</code>)
+    e aprila dal telefono all'indirizzo <code>http://IP-DEL-PC:5000</code>, collegato alla stessa rete WiFi.
+    Al primo avvio del timer concedi il permesso alle notifiche per sentire la fine del recupero
+    anche con lo schermo bloccato.
+  </p>
+</section>
+{% endblock %}
+
+{% block script %}
+{% if stato_ollama.configurato and not stato_ollama.server_attivo %}
+  <script src="{{ url_for('static', filename='js/ollama.js') }}"></script>
+  <script>
+    // Il pulsante compare dentro l'avviso "server spento". A server avviato la
+    // pagina si ricarica: lo stato mostrato qui e' calcolato sul server, quindi
+    // riscriverlo a mano vorrebbe dire tenere due verita' allineate.
+    (function () {
+      var avviso = document.getElementById("stato-ollama");
+      if (!avviso) return;
+      avviso.append(
+        window.Ollama.pulsante("{{ url_for('statistiche.avvia_ollama') }}", function (esito) {
+          if (esito.ok) {
+            window.location.reload();
+          } else {
+            avviso.textContent = esito.messaggio;
+          }
+        })
+      );
+    })();
+  </script>
+{% endif %}
+{% endblock %}

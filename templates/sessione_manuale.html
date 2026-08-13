@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block titolo %}{{ 'Modifica allenamento' if modifica else 'Inserimento manuale' }} — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>{{ 'Modifica allenamento' if modifica else 'Inserisci allenamento' }}</h1>
+  {% if modifica %}
+    <a class="btn btn-piccolo" href="{{ url_for('calendario.dettaglio_giorno', giorno=sessione.data.isoformat()) }}">‹ Giorno</a>
+  {% else %}
+    <a class="btn btn-piccolo" href="{{ url_for('calendario.vista_mensile') }}">‹ Calendario</a>
+  {% endif %}
+</div>
+
+{% if modifica %}
+  <p class="sottotitolo">
+    {{ sessione.nome_scheda }} · {{ sessione.data | data_it }} — correggi serie, pesi e note di un allenamento già salvato.
+  </p>
+{% else %}
+  <p class="sottotitolo">Registra un allenamento già svolto, anche di giorni passati.</p>
+
+  <section class="scheda-card">
+    <form class="form-inline" method="get">
+      <label>Data
+        <input type="date" name="data" value="{{ giorno.isoformat() }}" max="{{ oggi.isoformat() }}">
+      </label>
+      <label>Scheda
+        <select name="scheda_id">
+          <option value="">— scegli —</option>
+          {% for s in schede %}
+            <option value="{{ s.id }}" {{ 'selected' if scheda and s.id == scheda.id }}>{{ s.nome }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn" type="submit">Carica esercizi</button>
+    </form>
+    {% if not schede %}
+      <p class="aiuto">Non hai schede attive. <a href="{{ url_for('schede.nuova') }}">Creane una</a> per iniziare.</p>
+    {% endif %}
+  </section>
+{% endif %}
+
+{% if modifica or scheda %}
+  <form method="post" action="{{ url_for('sessione.salva_modifica', sessione_id=sessione.id) if modifica else url_for('sessione.salva_manuale') }}">
+    {% if not modifica %}
+      <input type="hidden" name="data" value="{{ giorno.isoformat() }}">
+      <input type="hidden" name="scheda_id" value="{{ scheda.id }}">
+    {% endif %}
+
+    <p class="aiuto">
+      {% if modifica %}
+        Le righe mostrano quello che è stato registrato: cambia i valori sbagliati.
+        Svuotare una riga significa cancellare quella serie; con
+        <strong>+ Serie</strong> e la ✕ ne aggiungi o togli.
+      {% else %}
+        Le righe sono precompilate con i target della scheda: correggi quello che è
+        andato diversamente. Un esercizio che non hai fatto segnalo con
+        <strong>Saltato</strong>; con <strong>+ Serie</strong> e la ✕ sulla riga
+        aggiungi o togli serie.
+      {% endif %}
+    </p>
+
+    {% for blocco in blocchi %}
+      {% set esercizio = blocco.esercizio %}
+      <article class="scheda-card blocco-manuale" data-chiave="{{ blocco.chiave }}"
+               data-usa-peso="{{ '1' if blocco.usa_peso else '0' }}"
+               data-a-tempo="{{ '1' if blocco.a_tempo else '0' }}"
+               data-saltato="{{ '1' if blocco.saltato else '0' }}"
+               data-peso="{{ blocco.peso_default if blocco.peso_default else '' }}"
+               data-valore="{{ blocco.valore_default if blocco.valore_default else '' }}">
+        <div class="intestazione-card">
+          <h2>{{ loop.index }}. {{ esercizio.nome }}</h2>
+          <div class="frecce-mese">
+            <button class="btn btn-piccolo btn-svuota" type="button">Svuota</button>
+            <button class="btn btn-piccolo btn-saltato" type="button"
+                    aria-pressed="false">Saltato</button>
+          </div>
+        </div>
+        {% if esercizio.note_tecniche %}<p class="nota-tecnica">{{ esercizio.note_tecniche }}</p>{% endif %}
+
+        <input type="hidden" name="saltato-{{ blocco.chiave }}" value="0">
+
+        <p class="etichetta-saltato" hidden>
+          Esercizio non svolto: verrà registrato come saltato.
+          <input type="text" name="motivo-saltato-{{ blocco.chiave }}" class="motivo-saltato"
+                 value="{{ blocco.motivo }}"
+                 placeholder="Motivo (facoltativo): es. dolore alla spalla, tempo finito">
+        </p>
+
+        <div class="griglia-manuale">
+          <div class="riga-intestazione">
+            <span>Serie</span>
+            {% if blocco.usa_peso %}<span>Peso (kg)</span>{% endif %}
+            <span>{{ 'Secondi' if blocco.a_tempo else 'Ripetizioni' }}</span>
+            <span>Nota</span>
+            <span></span>
+          </div>
+          {% for riga in blocco.righe %}
+            <div class="riga-manuale" data-indice="{{ riga.indice }}">
+              <span class="numero-serie">{{ loop.index }}</span>
+              {% if blocco.usa_peso %}
+                <input type="number" name="serie-{{ blocco.chiave }}-{{ riga.indice }}-peso" step="0.5" min="0"
+                       inputmode="decimal" aria-label="Peso serie {{ loop.index }}"
+                       value="{{ riga.peso if riga.peso is not none else '' }}">
+              {% endif %}
+              <span class="campo-passo">
+                <button class="btn-passo" type="button" data-passo="-1" aria-label="Diminuisci">−</button>
+                {% if blocco.a_tempo %}
+                  <input type="number" name="serie-{{ blocco.chiave }}-{{ riga.indice }}-durata" min="1"
+                         inputmode="numeric" aria-label="Secondi serie {{ loop.index }}"
+                         value="{{ riga.valore if riga.valore is not none else '' }}">
+                {% else %}
+                  <input type="number" name="serie-{{ blocco.chiave }}-{{ riga.indice }}-reps" min="1"
+                         inputmode="numeric" aria-label="Ripetizioni serie {{ loop.index }}"
+                         value="{{ riga.valore if riga.valore is not none else '' }}">
+                {% endif %}
+                <button class="btn-passo" type="button" data-passo="1" aria-label="Aumenta">+</button>
+              </span>
+              <input type="text" name="serie-{{ blocco.chiave }}-{{ riga.indice }}-nota"
+                     aria-label="Nota serie {{ loop.index }}" value="{{ riga.nota }}" placeholder="es. RIR 2">
+              <button class="btn-togli-riga" type="button" aria-label="Togli questa serie">✕</button>
+            </div>
+          {% endfor %}
+        </div>
+
+        <button class="btn btn-piccolo btn-aggiungi-riga" type="button">+ Serie</button>
+      </article>
+    {% endfor %}
+
+    <section class="scheda-card">
+      <h2>Dati della sessione</h2>
+      <div class="form-griglia">
+        {% if modifica %}
+          <label>Data
+            <input type="date" name="data" value="{{ giorno.isoformat() }}" max="{{ oggi.isoformat() }}">
+          </label>
+        {% endif %}
+        <label>Durata (min)
+          <input type="number" name="durata_minuti" min="1" inputmode="numeric" placeholder="es. 45"
+                 value="{{ sessione.durata_minuti if modifica and sessione.durata_minuti else '' }}">
+        </label>
+        <label>Energia (1-5)
+          <input type="number" name="energia" min="1" max="5" inputmode="numeric"
+                 value="{{ sessione.energia if modifica and sessione.energia else '' }}">
+        </label>
+        <label>Sonno (1-5)
+          <input type="number" name="sonno" min="1" max="5" inputmode="numeric"
+                 value="{{ sessione.sonno if modifica and sessione.sonno else '' }}">
+        </label>
+        <label>Umore (1-5)
+          <input type="number" name="umore" min="1" max="5" inputmode="numeric"
+                 value="{{ sessione.umore if modifica and sessione.umore else '' }}">
+        </label>
+        <label class="larga">Note generali
+          <textarea name="note_generali" rows="2">{{ sessione.note_generali if modifica else '' }}</textarea>
+        </label>
+        <div class="azioni larga">
+          <button class="btn btn-primario" type="submit">{{ 'Salva modifiche' if modifica else 'Salva allenamento' }}</button>
+          {% if modifica %}
+            <a class="btn" href="{{ url_for('calendario.dettaglio_giorno', giorno=sessione.data.isoformat()) }}">Annulla</a>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+  </form>
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script src="{{ url_for('static', filename='js/manuale.js') }}"></script>
+{% endblock %}

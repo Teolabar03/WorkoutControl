@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block titolo %}Allenamento in corso — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>{{ sessione.nome_scheda }}</h1>
+  <span class="cronometro" id="cronometro" data-inizio="{{ sessione.iniziata_alle.isoformat() }}">00:00</span>
+</div>
+
+{% if not blocchi %}
+  <div class="vuoto">
+    <p>Questa sessione non ha una scheda con esercizi.</p>
+    <p class="aiuto">Chiudila qui sotto indicando durata e note, oppure annullala e riavviala scegliendo una scheda.</p>
+  </div>
+{% endif %}
+
+<div class="sessione-esercizi">
+  {% for blocco in blocchi %}
+    {% set voce = blocco.voce %}
+    {% set esercizio = blocco.esercizio %}
+    <article class="scheda-card blocco-esercizio"
+             data-voce="{{ voce.id }}"
+             data-timer="{{ blocco.timer }}"
+             data-serie-target="{{ voce.serie_target }}"
+             data-a-tempo="{{ '1' if esercizio.a_tempo else '0' }}">
+      <div class="intestazione-card">
+        <h2>{{ loop.index }}. {{ esercizio.nome }}</h2>
+        <span class="contatore-serie">
+          <span class="fatte">{{ blocco.serie | length }}</span>/{{ voce.serie_target }}
+        </span>
+      </div>
+
+      <p class="aiuto">
+        Target:
+        {% if esercizio.a_tempo %}{{ voce.durata_target_sec }} sec{% else %}{{ voce.rep_target }} rip.{% endif %}
+        {% if voce.peso_suggerito_kg %} · {{ voce.peso_suggerito_kg | numero }} kg{% if esercizio.carichi_per_serie > 1 %} per manubrio{% endif %}{% endif %}
+        · recupero {{ blocco.timer }}s
+        {% if blocco.record %} · record {{ blocco.record.etichetta }}{% endif %}
+      </p>
+      {% if esercizio.note_tecniche %}<p class="nota-tecnica">{{ esercizio.note_tecniche }}</p>{% endif %}
+      {% if voce.note %}<p class="nota-sessione">📝 {{ voce.note }}</p>{% endif %}
+
+      <ul class="serie-registrate">
+        {% for serie in blocco.serie %}
+          <li data-serie="{{ serie.id }}">
+            <span class="numero-serie">{{ serie.numero_serie }}</span>
+            <span class="valore-serie">
+              {% if serie.peso_kg %}{{ serie.peso_kg | numero }} kg × {% endif %}
+              {% if serie.durata_secondi %}{{ serie.durata_secondi }}s{% else %}{{ serie.ripetizioni }}{% endif %}
+            </span>
+            {% if serie.is_pr %}<span class="badge-pr">🏆 PR</span>{% endif %}
+            {% if serie.note %}<span class="nota-serie">{{ serie.note }}</span>{% endif %}
+            <button class="btn-elimina-serie" type="button" title="Elimina serie">×</button>
+          </li>
+        {% endfor %}
+      </ul>
+
+      <form class="form-serie" onsubmit="return false;">
+        {% if esercizio.usa_peso %}
+          <label>Peso (kg)
+            {# Valore grezzo, non filtrato: <input type="number"> rifiuta la virgola. #}
+            <input type="number" class="campo-peso" step="0.5" min="0" inputmode="decimal"
+                   value="{{ voce.peso_suggerito_kg if voce.peso_suggerito_kg else '' }}">
+          </label>
+        {% endif %}
+        {% if esercizio.a_tempo %}
+          <label>Secondi
+            <input type="number" class="campo-durata" min="1" inputmode="numeric"
+                   value="{{ voce.durata_target_sec or '' }}">
+          </label>
+        {% else %}
+          <label>Ripetizioni
+            <input type="number" class="campo-reps" min="1" inputmode="numeric"
+                   value="{{ voce.rep_target or '' }}">
+          </label>
+        {% endif %}
+        <label class="larga">Nota
+          <input type="text" class="campo-nota" placeholder="es. RIR 2, pesante, male alla spalla">
+        </label>
+        <div class="azioni larga">
+          <button class="btn btn-primario btn-registra" type="button">Registra serie</button>
+          <button class="btn btn-timer" type="button">Recupero {{ blocco.timer }}s</button>
+        </div>
+      </form>
+      <p class="errore-serie" hidden></p>
+    </article>
+  {% endfor %}
+</div>
+
+<section class="scheda-card">
+  <h2>Chiudi l'allenamento</h2>
+  <form class="form-griglia" method="post" action="{{ url_for('sessione.termina', sessione_id=sessione.id) }}">
+    <label>Durata (min)
+      <input type="number" name="durata_minuti" id="campo-durata-finale" min="1" inputmode="numeric"
+             placeholder="calcolata automaticamente">
+    </label>
+    <label>Energia (1-5)
+      <input type="number" name="energia" min="1" max="5" inputmode="numeric">
+    </label>
+    <label>Sonno (1-5)
+      <input type="number" name="sonno" min="1" max="5" inputmode="numeric">
+    </label>
+    <label>Umore (1-5)
+      <input type="number" name="umore" min="1" max="5" inputmode="numeric">
+    </label>
+    <label class="larga">Note generali della sessione
+      <textarea name="note_generali" rows="2" placeholder="es. giornata scarica, ottima spinta…"></textarea>
+    </label>
+
+    <fieldset class="larga blocco-dolore">
+      <legend>Dolore o fastidio da segnalare? (facoltativo)</legend>
+      <div class="form-griglia">
+        <label>Zona
+          <input type="text" name="zona_corporea" placeholder="es. spalla destra">
+        </label>
+        <label>Gravità (1-5)
+          <input type="number" name="gravita" min="1" max="5" inputmode="numeric">
+        </label>
+        <label class="larga">Descrizione
+          <input type="text" name="descrizione_dolore" placeholder="es. fastidio dopo le croci">
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="azioni larga">
+      <button class="btn btn-primario" type="submit">Salva allenamento</button>
+    </div>
+  </form>
+
+  <form method="post" action="{{ url_for('sessione.annulla', sessione_id=sessione.id) }}"
+        onsubmit="return confirm('Annullare la sessione? Le serie registrate andranno perse.');">
+    <button class="btn btn-pericolo btn-piccolo" type="submit">Annulla sessione</button>
+  </form>
+</section>
+
+<!-- Pannello del timer di recupero, fisso in fondo allo schermo -->
+<div class="pannello-timer" id="pannello-timer" hidden>
+  <div class="timer-testo">
+    <span class="timer-etichetta">Recupero</span>
+    <span class="timer-valore" id="timer-valore">--</span>
+  </div>
+  <div class="timer-azioni">
+    <button class="btn btn-piccolo" id="timer-piu">+30s</button>
+    <button class="btn btn-piccolo" id="timer-stop">Stop</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  window.WORKOUT = {
+    sessioneId: {{ sessione.id }},
+    urlRegistraSerie: "{{ url_for('sessione.registra_serie', sessione_id=sessione.id) }}",
+    urlEliminaSerie: "{{ url_for('sessione.elimina_serie', serie_id=0) }}",
+    timerDefault: {{ timer_default }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/sessione.js') }}"></script>
+{% endblock %}

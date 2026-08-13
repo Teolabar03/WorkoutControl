@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block titolo %}{{ scheda.nome }} — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>{{ scheda.nome }}</h1>
+  <div class="frecce-mese">
+    <a class="btn btn-piccolo" href="{{ url_for('schede.elenco') }}">‹ Schede</a>
+    <a class="btn btn-piccolo" href="{{ url_for('schede.modifica', scheda_id=scheda.id) }}">Modifica</a>
+    {% if scheda.attiva and not sessione_corrente %}
+      <form method="post" action="{{ url_for('sessione.avvia') }}">
+        <input type="hidden" name="scheda_id" value="{{ scheda.id }}">
+        <button class="btn btn-primario btn-piccolo" type="submit">Avvia allenamento</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if scheda.descrizione %}<p class="sottotitolo">{{ scheda.descrizione }}</p>{% endif %}
+
+{% if not scheda.esercizi %}
+  <div class="vuoto">
+    <p>Questa scheda non ha ancora esercizi. Aggiungine uno dal modulo qui sotto.</p>
+  </div>
+{% endif %}
+
+<div class="lista-esercizi">
+  {% for voce in scheda.esercizi %}
+    <article class="scheda-card esercizio-riga">
+      <div class="intestazione-card">
+        <h3>{{ loop.index }}. {{ voce.esercizio.nome }}</h3>
+        <div class="frecce-mese">
+          <form method="post" action="{{ url_for('schede.sposta_esercizio', voce_id=voce.id) }}">
+            <input type="hidden" name="direzione" value="su">
+            <button class="btn btn-piccolo" type="submit" {{ 'disabled' if loop.first }}>↑</button>
+          </form>
+          <form method="post" action="{{ url_for('schede.sposta_esercizio', voce_id=voce.id) }}">
+            <input type="hidden" name="direzione" value="giu">
+            <button class="btn btn-piccolo" type="submit" {{ 'disabled' if loop.last }}>↓</button>
+          </form>
+        </div>
+      </div>
+
+      <p class="aiuto">
+        {{ voce.serie_target }} serie ×
+        {% if voce.durata_target_sec %}{{ voce.durata_target_sec }} sec{% else %}{{ voce.rep_target }} rip.{% endif %}
+        {% if voce.peso_suggerito_kg %} · {{ voce.peso_suggerito_kg | numero }} kg{% if voce.esercizio.carichi_per_serie > 1 %} × {{ voce.esercizio.carichi_per_serie }}{% endif %}{% endif %}
+        · recupero {{ voce.timer_recupero_secondi or timer_default }}s
+      </p>
+      <p class="aiuto">
+        <span class="tag">{{ voce.esercizio.gruppo_muscolare }}</span>
+        <span class="tag">{{ voce.esercizio.attrezzatura or 'corpo libero' }}</span>
+      </p>
+      {% if voce.esercizio.note_tecniche %}<p class="nota-tecnica">{{ voce.esercizio.note_tecniche }}</p>{% endif %}
+      {% if voce.note %}<p class="nota-sessione">📝 {{ voce.note }}</p>{% endif %}
+
+      <details class="modifica">
+        <summary>Modifica target</summary>
+        <form class="form-griglia" method="post" action="{{ url_for('schede.modifica_esercizio', voce_id=voce.id) }}">
+          <label>Serie
+            <input type="number" name="serie_target" value="{{ voce.serie_target }}" min="1" inputmode="numeric">
+          </label>
+          {% if voce.esercizio.a_tempo %}
+            <label>Secondi
+              <input type="number" name="durata_target_sec" value="{{ voce.durata_target_sec or '' }}" min="1" inputmode="numeric">
+            </label>
+          {% else %}
+            <label>Ripetizioni
+              <input type="number" name="rep_target" value="{{ voce.rep_target or '' }}" min="1" inputmode="numeric">
+            </label>
+          {% endif %}
+          {% if voce.esercizio.usa_peso %}
+            <label>Peso suggerito (kg)
+              <input type="number" name="peso_suggerito_kg" value="{{ voce.peso_suggerito_kg or '' }}" step="0.5" min="0" inputmode="decimal">
+            </label>
+          {% endif %}
+          <label>Recupero (sec)
+            <input type="number" name="timer_recupero_secondi" value="{{ voce.timer_recupero_secondi or '' }}"
+                   placeholder="{{ timer_default }}" min="5" inputmode="numeric">
+          </label>
+          <label class="larga">Note
+            <input type="text" name="note" value="{{ voce.note }}">
+          </label>
+          <div class="azioni larga">
+            <button class="btn btn-primario btn-piccolo" type="submit">Salva</button>
+          </div>
+        </form>
+        <form method="post" action="{{ url_for('schede.rimuovi_esercizio', voce_id=voce.id) }}"
+              onsubmit="return confirm('Rimuovere questo esercizio dalla scheda?');">
+          <button class="btn btn-pericolo btn-piccolo" type="submit">Rimuovi</button>
+        </form>
+      </details>
+    </article>
+  {% endfor %}
+</div>
+
+<section class="scheda-card">
+  <h2>Aggiungi un esercizio</h2>
+  {% if not libreria %}
+    <p class="aiuto">La libreria è vuota. <a href="{{ url_for('schede.libreria') }}">Aggiungi un esercizio</a> per iniziare.</p>
+  {% else %}
+    <form class="form-griglia" method="post" action="{{ url_for('schede.aggiungi_esercizio', scheda_id=scheda.id) }}">
+      <label class="larga">Esercizio
+        <select name="esercizio_libreria_id" required>
+          {% for esercizio in libreria %}
+            <option value="{{ esercizio.id }}">{{ esercizio.gruppo_muscolare }} — {{ esercizio.nome }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Serie
+        <input type="number" name="serie_target" value="4" min="1" inputmode="numeric">
+      </label>
+      <label>Ripetizioni
+        <input type="number" name="rep_target" value="12" min="1" inputmode="numeric">
+      </label>
+      <label>Secondi (isometrici)
+        <input type="number" name="durata_target_sec" placeholder="es. 45" min="1" inputmode="numeric">
+      </label>
+      <label>Peso suggerito (kg)
+        <input type="number" name="peso_suggerito_kg" step="0.5" min="0" inputmode="decimal">
+      </label>
+      <label>Recupero (sec)
+        <input type="number" name="timer_recupero_secondi" placeholder="{{ timer_default }}" min="5" inputmode="numeric">
+      </label>
+      <label class="larga">Note
+        <input type="text" name="note" placeholder="es. controllo eccentrico">
+      </label>
+      <div class="azioni larga">
+        <button class="btn btn-primario" type="submit">Aggiungi</button>
+      </div>
+    </form>
+    <p class="aiuto">Per un esercizio a tempo compila i secondi e lascia vuote le ripetizioni.</p>
+  {% endif %}
+</section>
+{% endblock %}

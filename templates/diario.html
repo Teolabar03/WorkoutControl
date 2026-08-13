@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block titolo %}Diario recupero e dolori — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Diario recupero e dolori</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('statistiche.vista') }}">‹ Statistiche</a>
+</div>
+
+<p class="sottotitolo">
+  Annota fastidi e stato di recupero. L'analisi AI incrocia queste note con gli
+  esercizi svolti per individuare pattern potenzialmente rischiosi.
+</p>
+
+<section class="scheda-card">
+  <h2>Nuova nota</h2>
+  <form class="form-griglia" method="post" action="{{ url_for('statistiche.nuova_nota') }}">
+    <label>Data
+      <input type="date" name="data" value="{{ oggi.isoformat() }}">
+    </label>
+    <label>Zona del corpo
+      <input type="text" name="zona_corporea" required placeholder="es. spalla destra, ginocchio">
+    </label>
+    <label>Gravità (1-5)
+      <input type="number" name="gravita" min="1" max="5" value="1" inputmode="numeric">
+    </label>
+    <label class="larga">Descrizione
+      <input type="text" name="descrizione" placeholder="es. dolore dopo il floor press, ginocchio ok oggi">
+    </label>
+    <div class="azioni larga">
+      <button class="btn btn-primario" type="submit">Aggiungi</button>
+    </div>
+  </form>
+</section>
+
+{% if correlazioni %}
+  <section class="scheda-card">
+    <h2>Esercizi presenti nelle sedute con dolore</h2>
+    <p class="aiuto">
+      Semplice conteggio di co-occorrenza, non una diagnosi: serve a capire dove guardare.
+    </p>
+    <ul class="lista-correlazioni">
+      {% for nome, conteggio in correlazioni[:10] %}
+        <li><span>{{ nome }}</span><strong>{{ conteggio }}×</strong></li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+
+<section class="scheda-card">
+  <h2>Storico</h2>
+  {% if not note %}
+    <p class="aiuto">Nessuna nota registrata. Meglio così.</p>
+  {% else %}
+    <ul class="lista-dolori">
+      {% for nota in note %}
+        <li class="gravita-{{ nota.gravita }}">
+          <div>
+            <strong>{{ nota.zona_corporea }}</strong>
+            <span class="tag">gravità {{ nota.gravita }}/5</span>
+            <span class="aiuto">{{ nota.data | data_it }}</span>
+            {% if nota.sessione_id %}
+              <a class="aiuto" href="{{ url_for('calendario.dettaglio_giorno', giorno=nota.data.isoformat()) }}">
+                vedi allenamento
+              </a>
+            {% endif %}
+          </div>
+          {% if nota.descrizione %}<p>{{ nota.descrizione }}</p>{% endif %}
+          <form method="post" action="{{ url_for('statistiche.elimina_nota', nota_id=nota.id) }}">
+            <button class="btn btn-piccolo" type="submit" title="Elimina">×</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endblock %}

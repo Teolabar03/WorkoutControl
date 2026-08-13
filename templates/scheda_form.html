@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titolo %}{{ 'Modifica scheda' if scheda else 'Nuova scheda' }} — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>{{ 'Modifica scheda' if scheda else 'Nuova scheda' }}</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('schede.elenco') }}">‹ Schede</a>
+</div>
+
+<form class="form-griglia scheda-card"
+      method="post"
+      action="{{ url_for('schede.modifica', scheda_id=scheda.id) if scheda else url_for('schede.nuova') }}">
+  <label class="larga">Nome
+    <input type="text" name="nome" required value="{{ scheda.nome if scheda else '' }}" placeholder="es. Sessione 1">
+  </label>
+  <label>Obiettivo
+    <input type="text" name="obiettivo" value="{{ scheda.obiettivo if scheda else '' }}" placeholder="forza, ipertrofia…">
+  </label>
+  {% if scheda %}
+    <label class="checkbox">
+      <input type="checkbox" name="attiva" {{ 'checked' if scheda.attiva }}> Scheda attiva
+    </label>
+  {% endif %}
+  <label class="larga">Descrizione
+    <textarea name="descrizione" rows="3">{{ scheda.descrizione if scheda else '' }}</textarea>
+  </label>
+  <div class="azioni larga">
+    <button class="btn btn-primario" type="submit">Salva</button>
+    {% if scheda %}
+      <a class="btn" href="{{ url_for('schede.dettaglio', scheda_id=scheda.id) }}">Annulla</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if scheda %}
+  <form method="post" action="{{ url_for('schede.elimina', scheda_id=scheda.id) }}"
+        onsubmit="return confirm('Eliminare questa scheda?');">
+    <button class="btn btn-pericolo btn-piccolo" type="submit">Elimina scheda</button>
+  </form>
+{% endif %}
+{% endblock %}

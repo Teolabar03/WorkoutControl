@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block titolo %}Peso corporeo — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Peso corporeo</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('statistiche.vista') }}">‹ Statistiche</a>
+</div>
+
+<section class="scheda-card">
+  <h2>Registra una misura</h2>
+  <form class="form-griglia" method="post" action="{{ url_for('statistiche.nuovo_peso') }}">
+    <label>Data
+      <input type="date" name="data" value="{{ oggi.isoformat() }}" max="{{ oggi.isoformat() }}">
+    </label>
+    <label>Peso (kg)
+      <input type="number" name="valore_kg" step="0.1" min="1" required inputmode="decimal" placeholder="es. 72,4">
+    </label>
+    <label class="larga">Note
+      <input type="text" name="note" placeholder="es. a digiuno, dopo colazione…">
+    </label>
+    <div class="azioni larga">
+      <button class="btn btn-primario" type="submit">Salva</button>
+    </div>
+  </form>
+  <p class="aiuto">Una misura al giorno: registrandone una seconda nella stessa data, sostituisce la precedente.</p>
+</section>
+
+{% if grafico.labels %}
+  <section class="scheda-card">
+    <h2>Andamento</h2>
+    <div class="area-grafico"><canvas id="grafico-peso"></canvas></div>
+  </section>
+{% endif %}
+
+<section class="scheda-card">
+  <h2>Storico</h2>
+  {% if not misure %}
+    <p class="aiuto">Nessuna misura registrata.</p>
+  {% else %}
+    <table class="tabella">
+      <thead><tr><th>Data</th><th>Peso</th><th>Note</th><th></th></tr></thead>
+      <tbody>
+        {% for misura in misure %}
+          <tr>
+            <td>{{ misura.data | data_it }}</td>
+            <td><strong>{{ misura.valore_kg | numero }} kg</strong></td>
+            <td>{{ misura.note }}</td>
+            <td>
+              <form method="post" action="{{ url_for('statistiche.elimina_peso', misura_id=misura.id) }}">
+                <button class="btn btn-piccolo" type="submit" title="Elimina">×</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block script %}
+{% if grafico.labels %}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script>
+  window.DATI_GRAFICI = { peso: {{ grafico | tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/grafici.js') }}"></script>
+{% endif %}
+{% endblock %}
