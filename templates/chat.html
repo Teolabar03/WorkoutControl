@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block titolo %}Assistente AI — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Assistente AI</h1>
+  <div class="frecce-mese">
+    <a class="btn btn-piccolo" href="{{ url_for('statistiche.vista') }}">‹ Statistiche</a>
+    <label class="scelta-modello">
+      <span class="sr-only">Modello</span>
+      {# Una sola opzione: l'elenco completo lo carica chat.js, cosi' aprire la
+         chat non aspetta mai una risposta dei provider. #}
+      <select id="chat-modello" title="Modello che risponde">
+        <option value="{{ modello_chiave }}" selected>{{ modello_attivo }}</option>
+      </select>
+    </label>
+    <form method="post" action="{{ url_for('statistiche.nuova_chat') }}">
+      <button class="btn btn-piccolo" type="submit">+ Nuova chat</button>
+    </form>
+  </div>
+</div>
+
+{% if totale_sessioni == 0 %}
+  <p class="avviso">
+    Non hai ancora allenamenti completati: l'assistente può rispondere, ma senza
+    dati su cui ragionare. <a href="{{ url_for('sessione.manuale') }}">Inseriscine uno</a>.
+  </p>
+{% endif %}
+
+<div class="chat-layout">
+  <section class="chat-principale scheda-card">
+    <div class="chat-messaggi" id="chat-messaggi">
+      {% if not conversazione.messaggi %}
+        <div class="chat-benvenuto">
+          <p>
+            Fammi una domanda sui tuoi allenamenti, o chiedimi di fare qualcosa.
+            Vedo sedute, serie, pesi e note, il diario dolori e il peso corporeo,
+            e posso anche <strong>creare e modificare schede, registrare o
+            correggere allenamenti</strong> e aggiornare la libreria esercizi.
+          </p>
+          <div class="suggerimenti">
+            {% for suggerimento in suggerimenti %}
+              <button class="btn btn-piccolo suggerimento" type="button">{{ suggerimento }}</button>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% for messaggio in conversazione.messaggi %}
+        <div class="bolla bolla-{{ messaggio.ruolo }}" data-messaggio="{{ messaggio.id }}">
+          <div class="bolla-testo" {% if messaggio.ruolo == 'assistant' %}data-markdown="1"{% endif %}>{{ messaggio.contenuto }}</div>
+          {% if messaggio.elenco_azioni %}
+            <ul class="azioni-ai">
+              {% for azione in messaggio.elenco_azioni %}<li>{{ azione }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+          {% if messaggio.avviso %}
+            <p class="avviso-bolla">{{ messaggio.avviso }}</p>
+          {% endif %}
+          <span class="bolla-meta">
+            {{ messaggio.data.strftime('%d/%m %H:%M') }}
+            {% if messaggio.modello %} · {{ messaggio.modello }}{% endif %}
+            {% if messaggio.n_sessioni_contesto %} · {{ messaggio.n_sessioni_contesto }} allenamenti nel contesto{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+
+      <div class="bolla bolla-assistant sta-scrivendo" id="sta-scrivendo" hidden>
+        <div class="puntini"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+
+    <p class="errore-chat" id="errore-chat" hidden></p>
+
+    <form class="chat-invio" id="chat-form">
+      <textarea id="chat-testo" rows="2"
+                placeholder="Scrivi qui… (Invio per mandare, Maiusc+Invio per andare a capo)"></textarea>
+      <button class="btn btn-primario" type="submit" id="chat-invia">Invia</button>
+    </form>
+    <p class="aiuto">
+      Contesto:
+      <input type="number" id="chat-n-sessioni" value="{{ n_default }}" min="1" max="100" inputmode="numeric">
+      ultimi allenamenti · risponde <strong id="chat-provider">{{ etichetta_provider }}</strong>
+      <span class="tag" id="chat-modello-nome">{{ modello_attivo }}</span>
+      <span id="chat-riserva" {{ "hidden" if not modello_riserva }}>
+        · riserva locale <span class="tag" id="chat-riserva-nome">{{ modello_riserva or "" }}</span>
+        (<a href="{{ url_for('statistiche.impostazioni') }}">stato</a>)
+      </span>
+    </p>
+  </section>
+
+  <aside class="chat-storico scheda-card">
+    <h2>Conversazioni</h2>
+    <ul class="lista-conversazioni">
+      {% for c in conversazioni %}
+        <li class="{{ 'attiva' if c.id == conversazione.id }}">
+          <a href="{{ url_for('statistiche.chat', conversazione_id=c.id) }}">
+            <strong>{{ c.titolo }}</strong>
+            <span class="aiuto">{{ c.data_ultimo_messaggio.strftime('%d/%m/%Y') }}</span>
+          </a>
+          <form method="post" action="{{ url_for('statistiche.elimina_chat', conversazione_id=c.id) }}"
+                onsubmit="return confirm('Eliminare questa conversazione?');">
+            <button class="btn btn-piccolo" type="submit" title="Elimina">×</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  </aside>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+  window.CHAT = {
+    urlMessaggio: "{{ url_for('statistiche.invia_messaggio', conversazione_id=conversazione.id) }}",
+    urlAvviaOllama: "{{ url_for('statistiche.avvia_ollama') }}",
+    urlModelli: "{{ url_for('statistiche.modelli_ai') }}",
+    urlCambiaModello: "{{ url_for('statistiche.cambia_modello_ai') }}",
+    // L'id del messaggio va sostituito al segnaposto: Flask non sa ancora
+    // quale sara' quando costruisce la pagina.
+    urlRigenera: "{{ url_for('statistiche.rigenera_messaggio', conversazione_id=conversazione.id, messaggio_id=0) }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/ollama.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

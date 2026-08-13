@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block titolo %}Schede — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Schede</h1>
+  <div class="frecce-mese">
+    <a class="btn btn-piccolo" href="{{ url_for('schede.libreria') }}">Libreria esercizi</a>
+    <a class="btn btn-primario btn-piccolo" href="{{ url_for('schede.nuova') }}">+ Nuova</a>
+  </div>
+</div>
+
+{% if not schede %}
+  <div class="vuoto">
+    <p>Non hai ancora nessuna scheda.</p>
+    <a class="btn btn-primario" href="{{ url_for('schede.nuova') }}">Crea la prima scheda</a>
+  </div>
+{% endif %}
+
+<div class="lista-schede">
+  {% for scheda in schede %}
+    <article class="scheda-card {{ 'archiviata' if not scheda.attiva }}">
+      <div class="intestazione-card">
+        <h2><a href="{{ url_for('schede.dettaglio', scheda_id=scheda.id) }}">{{ scheda.nome }}</a></h2>
+        {% if not scheda.attiva %}<span class="tag">archiviata</span>{% endif %}
+      </div>
+      {% if scheda.obiettivo %}<span class="tag tag-obiettivo">{{ scheda.obiettivo }}</span>{% endif %}
+      {% if scheda.descrizione %}<p class="sottotitolo">{{ scheda.descrizione }}</p>{% endif %}
+      <p class="aiuto">
+        {{ scheda.esercizi | length }} esercizi ·
+        {{ scheda.sessioni | selectattr('completata') | list | length }} allenamenti svolti
+      </p>
+      <div class="azioni">
+        {% if scheda.attiva and not sessione_corrente %}
+          <form method="post" action="{{ url_for('sessione.avvia') }}">
+            <input type="hidden" name="scheda_id" value="{{ scheda.id }}">
+            <button class="btn btn-primario btn-piccolo" type="submit">Avvia</button>
+          </form>
+        {% endif %}
+        <a class="btn btn-piccolo" href="{{ url_for('schede.dettaglio', scheda_id=scheda.id) }}">Apri</a>
+        <form method="post" action="{{ url_for('schede.duplica', scheda_id=scheda.id) }}">
+          <button class="btn btn-piccolo" type="submit">Duplica</button>
+        </form>
+      </div>
+    </article>
+  {% endfor %}
+</div>
+{% endblock %}

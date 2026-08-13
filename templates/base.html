@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111418">
+  <title>{% block titolo %}WorkoutTracker{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋️</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('calendario.vista_mensile') }}">🏋️ WorkoutTracker</a>
+    <nav class="nav">
+      <a href="{{ url_for('calendario.vista_mensile') }}">Calendario</a>
+      <a href="{{ url_for('schede.elenco') }}">Schede</a>
+      <a href="{{ url_for('statistiche.vista') }}">Statistiche</a>
+      {% if ai_disponibile %}<a href="{{ url_for('statistiche.chat') }}">Assistente AI</a>{% endif %}
+      <a href="{{ url_for('statistiche.peso') }}">Peso</a>
+      <a href="{{ url_for('statistiche.diario') }}">Diario</a>
+    </nav>
+  </header>
+
+  {% if sessione_corrente and request.endpoint != 'sessione.attiva' %}
+    <a class="banner-sessione" href="{{ url_for('sessione.attiva', sessione_id=sessione_corrente.id) }}">
+      ● Allenamento in corso — riprendi
+    </a>
+  {% endif %}
+
+  <main class="contenuto">
+    {% with messaggi = get_flashed_messages(with_categories=true) %}
+      {% if messaggi %}
+        <div class="flash-area">
+          {% for categoria, testo in messaggi %}
+            <div class="flash flash-{{ categoria }}">{{ testo }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block contenuto %}{% endblock %}
+  </main>
+
+  {% block script %}{% endblock %}
+</body>
+</html>

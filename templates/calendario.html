@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block titolo %}Calendario — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>{{ nome_mese }} {{ anno }}</h1>
+  <div class="frecce-mese">
+    <a class="btn btn-piccolo" href="{{ url_for('calendario.vista_mensile', anno=mese_precedente.year, mese=mese_precedente.month) }}">‹</a>
+    <a class="btn btn-piccolo" href="{{ url_for('calendario.vista_mensile') }}">Oggi</a>
+    <a class="btn btn-piccolo" href="{{ url_for('calendario.vista_mensile', anno=mese_successivo.year, mese=mese_successivo.month) }}">›</a>
+  </div>
+</div>
+
+<p class="sottotitolo">
+  {% if totale_mese %}
+    {{ totale_mese }} allenament{{ 'o' if totale_mese == 1 else 'i' }} questo mese.
+  {% else %}
+    Nessun allenamento registrato in questo mese.
+  {% endif %}
+</p>
+
+{% if not sessione_corrente %}
+  {% if schede %}
+    <form class="avvio-rapido" method="post" action="{{ url_for('sessione.avvia') }}">
+      <label for="scheda-rapida">Inizia un allenamento</label>
+      <select id="scheda-rapida" name="scheda_id">
+        {% for scheda in schede %}
+          <option value="{{ scheda.id }}">{{ scheda.nome }}</option>
+        {% endfor %}
+        <option value="">Allenamento libero</option>
+      </select>
+      <button class="btn btn-primario" type="submit">Avvia</button>
+      <a class="btn" href="{{ url_for('sessione.manuale') }}">Inserisci manualmente</a>
+    </form>
+  {% else %}
+    <div class="vuoto">
+      <p>Non hai ancora nessuna scheda.</p>
+      <a class="btn btn-primario" href="{{ url_for('schede.nuova') }}">Crea la prima scheda</a>
+    </div>
+  {% endif %}
+{% endif %}
+
+<div class="calendario">
+  <div class="griglia intestazione-griglia">
+    {% for giorno in ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'] %}
+      <div class="cella-intestazione">{{ giorno }}</div>
+    {% endfor %}
+  </div>
+
+  {% for settimana in settimane %}
+    <div class="griglia">
+      {% for giorno in settimana %}
+        {% set sessioni_giorno = per_giorno.get(giorno, []) %}
+        <a class="cella
+                  {% if giorno.month != mese %}fuori-mese{% endif %}
+                  {% if giorno == oggi %}oggi{% endif %}
+                  {% if sessioni_giorno %}con-allenamento{% endif %}"
+           href="{{ url_for('calendario.dettaglio_giorno', giorno=giorno.isoformat()) }}">
+          <span class="numero-giorno">{{ giorno.day }}</span>
+          {% if sessioni_giorno %}
+            <span class="pallini">
+              {% for s in sessioni_giorno %}<span class="pallino {{ 'incompleta' if not s.completata }}"></span>{% endfor %}
+            </span>
+            <span class="etichetta-cella">{{ sessioni_giorno[0].nome_scheda }}</span>
+          {% endif %}
+          {% if giorno in giorni_con_dolore %}<span class="segno-dolore" title="Dolore segnalato">!</span>{% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  {% endfor %}
+</div>
+
+<p class="legenda">
+  <span class="pallino"></span> allenamento completato ·
+  <span class="pallino incompleta"></span> sessione non chiusa ·
+  <span class="segno-dolore statico">!</span> dolore segnalato
+</p>
+{% endblock %}

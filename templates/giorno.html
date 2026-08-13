@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block titolo %}{{ giorno | data_it }} — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>{{ giorno | data_it }}</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('calendario.vista_mensile', anno=giorno.year, mese=giorno.month) }}">‹ Calendario</a>
+</div>
+
+{% if not dettagli %}
+  <div class="vuoto">
+    <p>Nessun allenamento registrato in questa data.</p>
+    {% if not e_futuro and schede %}
+      <a class="btn btn-primario" href="{{ url_for('sessione.manuale', data=giorno.isoformat()) }}">
+        Inserisci allenamento
+      </a>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% for sessione, gruppi in dettagli %}
+  <section class="scheda-card">
+    <div class="intestazione-card">
+      <h2>{{ sessione.nome_scheda }}</h2>
+      {% if sessione.completata %}
+        <a class="btn btn-piccolo" href="{{ url_for('sessione.modifica', sessione_id=sessione.id) }}">✎ Modifica</a>
+      {% else %}
+        <a class="btn btn-primario btn-piccolo" href="{{ url_for('sessione.attiva', sessione_id=sessione.id) }}">Riprendi</a>
+      {% endif %}
+    </div>
+
+    <ul class="metriche">
+      <li><strong>{{ sessione.durata_minuti or '—' }}</strong><span>minuti</span></li>
+      <li><strong>{{ sessione.serie | length }}</strong><span>serie</span></li>
+      <li><strong>{{ sessione.volume_kg | numero }}</strong><span>kg volume</span></li>
+      <li><strong>{{ sessione.energia or '—' }}/5</strong><span>energia</span></li>
+    </ul>
+
+    {% if gruppi %}
+      <table class="tabella">
+        <thead><tr><th>Esercizio</th><th>Serie eseguite</th></tr></thead>
+        <tbody>
+          {% for nome, serie in gruppi.items() %}
+            <tr>
+              <td>{{ nome }}</td>
+              <td class="celle-serie">
+                {% for s in serie %}
+                  <span class="chip {{ 'chip-pr' if s.is_pr }}" {% if s.note %}title="{{ s.note }}"{% endif %}>
+                    {% if s.peso_kg %}{{ s.peso_kg | numero }} kg × {% endif %}
+                    {% if s.durata_secondi %}{{ s.durata_secondi }}s{% else %}{{ s.ripetizioni }}{% endif %}
+                    {% if s.is_pr %} 🏆{% endif %}
+                  </span>
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="aiuto">Nessuna serie registrata per questa sessione.</p>
+    {% endif %}
+
+    {% if sessione.esercizi_saltati %}
+      <p class="aiuto">Saltati:</p>
+      <div class="celle-serie">
+        {% for saltato in sessione.esercizi_saltati %}
+          <span class="chip chip-saltato" {% if saltato.motivo %}title="{{ saltato.motivo }}"{% endif %}>
+            {{ saltato.esercizio.nome }}{% if saltato.motivo %} — {{ saltato.motivo }}{% endif %}
+          </span>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if sessione.note_generali %}
+      <p class="nota-sessione">📝 {{ sessione.note_generali }}</p>
+    {% endif %}
+
+    <details class="modifica">
+      <summary>Modifica rapida (solo dati generali)</summary>
+      <form class="form-griglia" method="post" action="{{ url_for('calendario.modifica_sessione', sessione_id=sessione.id) }}">
+        <label>Scheda
+          <select name="scheda_id">
+            <option value="">Allenamento libero</option>
+            {% for scheda in schede %}
+              <option value="{{ scheda.id }}" {{ 'selected' if sessione.scheda_id == scheda.id }}>{{ scheda.nome }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Durata (min)
+          <input type="number" name="durata_minuti" value="{{ sessione.durata_minuti or '' }}" inputmode="numeric" min="1">
+        </label>
+        <label>Energia
+          <input type="number" name="energia" value="{{ sessione.energia or '' }}" min="1" max="5" inputmode="numeric">
+        </label>
+        <label>Sonno
+          <input type="number" name="sonno" value="{{ sessione.sonno or '' }}" min="1" max="5" inputmode="numeric">
+        </label>
+        <label>Umore
+          <input type="number" name="umore" value="{{ sessione.umore or '' }}" min="1" max="5" inputmode="numeric">
+        </label>
+        <label class="larga">Note
+          <textarea name="note_generali" rows="2">{{ sessione.note_generali }}</textarea>
+        </label>
+        <div class="azioni larga">
+          <button class="btn btn-primario" type="submit">Salva</button>
+        </div>
+      </form>
+      <form method="post" action="{{ url_for('calendario.elimina_sessione', sessione_id=sessione.id) }}"
+            onsubmit="return confirm('Eliminare definitivamente questa sessione e tutte le sue serie?');">
+        <button class="btn btn-pericolo btn-piccolo" type="submit">Elimina sessione</button>
+      </form>
+    </details>
+  </section>
+{% endfor %}
+
+{% if dolori %}
+  <section class="scheda-card">
+    <h2>Diario dolori</h2>
+    <ul class="lista-dolori">
+      {% for d in dolori %}
+        <li><strong>{{ d.zona_corporea }}</strong> — gravità {{ d.gravita }}/5{% if d.descrizione %} · {{ d.descrizione }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+{% endblock %}

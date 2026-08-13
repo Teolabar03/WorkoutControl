@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block titolo %}Libreria esercizi — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Libreria esercizi</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('schede.elenco') }}">‹ Schede</a>
+</div>
+
+<p class="sottotitolo">Filtra per attrezzatura per vedere cosa puoi fare con quello che hai in casa.</p>
+
+<div class="filtri">
+  <button class="btn btn-piccolo filtro attivo" data-attrezzo="">Tutti</button>
+  {% for attrezzo in attrezzature %}
+    <button class="btn btn-piccolo filtro" data-attrezzo="{{ attrezzo }}">{{ attrezzo }}</button>
+  {% endfor %}
+</div>
+
+<div class="lista-esercizi" id="lista-libreria">
+  {% for esercizio in esercizi %}
+    <article class="scheda-card esercizio-riga {{ 'archiviata' if esercizio.archiviato }}"
+             data-attrezzatura="{{ esercizio.attrezzatura }}">
+      <div class="intestazione-card">
+        <h3>{{ esercizio.nome }}</h3>
+        <form method="post" action="{{ url_for('schede.archivia_esercizio', esercizio_id=esercizio.id) }}">
+          <button class="btn btn-piccolo" type="submit">{{ 'Ripristina' if esercizio.archiviato else 'Archivia' }}</button>
+        </form>
+      </div>
+      <p class="aiuto">
+        <span class="tag">{{ esercizio.gruppo_muscolare }}</span>
+        <span class="tag">{{ esercizio.attrezzatura or 'corpo libero' }}</span>
+        <span class="tag">{{ esercizio.tipo_carico }}</span>
+        {% if esercizio.a_tempo %}<span class="tag">a tempo</span>{% endif %}
+        {% if esercizio.carichi_per_serie > 1 %}<span class="tag">{{ esercizio.carichi_per_serie }} manubri</span>{% endif %}
+        {% if esercizio.is_custom %}<span class="tag tag-obiettivo">custom</span>{% endif %}
+      </p>
+      {% if esercizio.note_tecniche %}<p class="nota-tecnica">{{ esercizio.note_tecniche }}</p>{% endif %}
+    </article>
+  {% endfor %}
+</div>
+
+<section class="scheda-card">
+  <h2>Aggiungi esercizio custom</h2>
+  <form class="form-griglia" method="post" action="{{ url_for('schede.nuovo_esercizio') }}">
+    <label class="larga">Nome
+      <input type="text" name="nome" required placeholder="es. Push-up con piedi rialzati">
+    </label>
+    <label>Gruppo muscolare
+      <input type="text" name="gruppo_muscolare" placeholder="es. Petto">
+    </label>
+    <label>Attrezzatura
+      <input type="text" name="attrezzatura" placeholder="es. Manubri, Sedia">
+    </label>
+    <label>Tipo di carico
+      <select name="tipo_carico">
+        {% for tipo in tipi_carico %}<option value="{{ tipo }}">{{ tipo }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Misura
+      <select name="tipo_misura">
+        {% for tipo in tipi_misura %}<option value="{{ tipo }}">{{ 'ripetizioni' if tipo == 'reps' else 'secondi' }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Carichi per serie
+      <input type="number" name="carichi_per_serie" min="0" max="2" placeholder="2 = due manubri" inputmode="numeric">
+    </label>
+    <label class="larga">Note tecniche
+      <input type="text" name="note_tecniche" placeholder="es. controllo eccentrico, 3 secondi in discesa">
+    </label>
+    <div class="azioni larga">
+      <button class="btn btn-primario" type="submit">Aggiungi alla libreria</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block script %}
+<script>
+  // Filtro client-side per attrezzatura: la libreria e' piccola, non serve
+  // un round-trip al server.
+  const bottoni = document.querySelectorAll('.filtro');
+  const righe = document.querySelectorAll('#lista-libreria .esercizio-riga');
+  bottoni.forEach((bottone) => {
+    bottone.addEventListener('click', () => {
+      bottoni.forEach((b) => b.classList.remove('attivo'));
+      bottone.classList.add('attivo');
+      const attrezzo = bottone.dataset.attrezzo;
+      righe.forEach((riga) => {
+        const lista = (riga.dataset.attrezzatura || '')
+          .split(',')
+          .map((s) => s.trim());
+        riga.hidden = attrezzo !== '' && !lista.includes(attrezzo);
+      });
+    });
+  });
+</script>
+{% endblock %}
