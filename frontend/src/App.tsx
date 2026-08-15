@@ -42,7 +42,10 @@ function AuthGate({ children }: { children: ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/* basename = prefisso di deploy (vedi `base` in vite.config.ts): '/' in
+          locale, '/workout/' sulla VPS dietro nginx. Così i path assoluti delle
+          Route qui sotto restano scritti come sono e valgono in entrambi i casi. */}
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthGate>
           <Routes>
             <Route element={<Layout />}>
