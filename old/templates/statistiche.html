@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block titolo %}Statistiche — WorkoutTracker{% endblock %}
+
+{% block contenuto %}
+<div class="intestazione-pagina">
+  <h1>Statistiche</h1>
+  <a class="btn btn-piccolo" href="{{ url_for('statistiche.impostazioni') }}">Impostazioni</a>
+</div>
+
+{% if riepilogo.totale_sessioni == 0 %}
+  <div class="vuoto">
+    <p>Nessun allenamento completato: qui compariranno i grafici appena chiudi la prima sessione.</p>
+    <a class="btn btn-primario" href="{{ url_for('schede.elenco') }}">Vai alle schede</a>
+  </div>
+{% else %}
+  <ul class="metriche metriche-grandi">
+    <li><strong>{{ riepilogo.totale_sessioni }}</strong><span>allenamenti totali</span></li>
+    <li><strong>{{ riepilogo.sessioni_30_giorni }}</strong><span>negli ultimi 30 giorni</span></li>
+    <li><strong>{{ riepilogo.volume_totale_kg | numero }}</strong><span>kg sollevati</span></li>
+    <li><strong>{{ riepilogo.durata_media_min or '—' }}</strong><span>minuti in media</span></li>
+  </ul>
+
+  <section class="gruppo-statistiche">
+    <h2>Andamento generale</h2>
+
+    <section class="scheda-card">
+      <h3>Frequenza settimanale</h3>
+      <div class="area-grafico"><canvas id="grafico-frequenza"></canvas></div>
+    </section>
+
+    {% if aderenza.labels %}
+      <section class="scheda-card">
+        <h3>Aderenza alla scheda</h3>
+        {% if aderenza_riepilogo %}
+          <p class="aiuto">
+            Hai completato in media il <strong>{{ aderenza_riepilogo.media }}%</strong>
+            delle serie previste nelle ultime {{ aderenza_riepilogo.n_sessioni }} sessioni con scheda.
+          </p>
+        {% endif %}
+        <div class="area-grafico"><canvas id="grafico-aderenza"></canvas></div>
+      </section>
+    {% endif %}
+  </section>
+
+  <section class="gruppo-statistiche">
+    <h2>Carico e progressione</h2>
+
+    <section class="scheda-card">
+      <div class="intestazione-card">
+        <h3>Carico di lavoro</h3>
+        <div class="filtri">
+          <button type="button" class="btn btn-piccolo filtro attivo" data-mostra="volume">Solo pesi</button>
+          <button type="button" class="btn btn-piccolo filtro" data-mostra="ripetizioni">Tutti gli esercizi</button>
+        </div>
+      </div>
+      <p class="aiuto" data-aiuto="volume">Peso × numero di manubri × ripetizioni: solo gli esercizi con manubri.</p>
+      <p class="aiuto" data-aiuto="ripetizioni" hidden>Ripetizioni totali per allenamento: copre anche elastico e corpo libero, dove il carico non si misura in kg.</p>
+      <div class="area-grafico">
+        <canvas id="grafico-volume"></canvas>
+        <canvas id="grafico-ripetizioni" hidden></canvas>
+      </div>
+    </section>
+
+    {% if esercizi %}
+      <section class="scheda-card">
+        <h3>Progressione per esercizio</h3>
+        <form class="form-inline" method="get">
+          <select name="esercizio" onchange="this.form.submit()">
+            {% for esercizio in esercizi %}
+              <option value="{{ esercizio.id }}" {{ 'selected' if esercizio.id == esercizio_scelto }}>{{ esercizio.nome }}</option>
+            {% endfor %}
+          </select>
+          <noscript><button class="btn btn-piccolo" type="submit">Mostra</button></noscript>
+        </form>
+        {% if progressione and progressione.labels %}
+          <p class="aiuto">Miglior serie per giornata, in {{ progressione.unita }}.</p>
+          <div class="area-grafico"><canvas id="grafico-progressione"></canvas></div>
+        {% else %}
+          <p class="aiuto">Nessun dato registrato per questo esercizio.</p>
+        {% endif %}
+      </section>
+    {% endif %}
+  </section>
+{% endif %}
+
+<section class="scheda-card" id="record">
+  <h2>Record personali</h2>
+  {% if not pr_correnti %}
+    <p class="aiuto">Nessun record ancora. Compariranno automaticamente man mano che ti alleni.</p>
+  {% else %}
+    <table class="tabella">
+      <thead><tr><th>Esercizio</th><th>Record</th><th>Data</th></tr></thead>
+      <tbody>
+        {% for pr in pr_correnti %}
+          <tr>
+            <td>{{ pr.esercizio.nome }}</td>
+            <td><strong>{{ pr.etichetta }}</strong></td>
+            <td>{{ pr.data | data_it }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if storico | length > pr_correnti | length %}
+      <details class="modifica">
+        <summary>Storico completo dei PR</summary>
+        <table class="tabella">
+          <thead><tr><th>Data</th><th>Esercizio</th><th>Valore</th></tr></thead>
+          <tbody>
+            {% for pr in storico %}
+              <tr><td>{{ pr.data | data_it }}</td><td>{{ pr.esercizio.nome }}</td><td>{{ pr.etichetta }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="gruppo-statistiche">
+  <h2>Corpo e recupero</h2>
+
+  {% if peso.labels %}
+    <section class="scheda-card">
+      <h3>Peso corporeo</h3>
+      <div class="area-grafico"><canvas id="grafico-peso"></canvas></div>
+    </section>
+  {% endif %}
+
+  <section class="scheda-card">
+    <div class="intestazione-card">
+      <h3>Diario dolori</h3>
+      <a class="btn btn-piccolo" href="{{ url_for('statistiche.diario') }}">Apri il diario</a>
+    </div>
+    <p class="aiuto">Segnala dolori o fastidi legati agli allenamenti: l'assistente AI li incrocia con gli esercizi svolti per segnalare pattern a rischio.</p>
+  </section>
+</section>
+{% endblock %}
+
+{% block script %}
+{% if riepilogo.totale_sessioni > 0 or peso.labels %}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script>
+  window.DATI_GRAFICI = {
+    volume: {{ volume | tojson }},
+    ripetizioni: {{ ripetizioni | tojson }},
+    progressione: {{ progressione | tojson if progressione else 'null' }},
+    frequenza: {{ frequenza | tojson }},
+    aderenza: {{ aderenza | tojson }},
+    peso: {{ peso | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/grafici.js') }}"></script>
+{% endif %}
+{% endblock %}

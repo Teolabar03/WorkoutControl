@@ -1,21 +1,30 @@
 """WorkoutTracker — webapp locale per gli allenamenti a casa.
 
-Avvio: `python app.py`
+Avvio: `python app.py`. Flask espone solo l'API JSON sotto `/api/*`; per il
+resto serve il build statico di React (`frontend/dist`), con fallback a
+`index.html` per lasciare il routing alla SPA (`spa()` più sotto).
 """
 
 import os
-from datetime import date
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, abort, send_from_directory
+from flask_cors import CORS
 
 from models import db
+from schemas import register_error_handlers
 
 load_dotenv()
 
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
 
 def create_app():
-    app = Flask(__name__, instance_relative_config=True)
+    # static_folder=None disabilita la route statica automatica di Flask:
+    # altrimenti intercetterebbe /<path:path> prima di spa() qui sotto e
+    # risponderebbe 404 raw (senza fallback a index.html) per ogni URL che
+    # non e' un file reale, rompendo il routing lato client di react-router.
+    app = Flask(__name__, instance_relative_config=True, static_folder=None)
     os.makedirs(app.instance_path, exist_ok=True)
 
     # Di norma il database sta in instance/workout.db. WORKOUT_DB_PATH permette
@@ -33,40 +42,40 @@ def create_app():
     )
 
     db.init_app(app)
+    register_error_handlers(app)
 
-    from blueprints import calendario, schede, sessione, statistiche
+    # In dev il frontend Vite gira su :5173 e proxya /api verso questo
+    # server: CORS serve solo come fallback (es. se il proxy non e' in uso).
+    origini_frontend = os.environ.get(
+        "WORKOUT_FRONTEND_ORIGIN", "http://127.0.0.1:5173,http://localhost:5173"
+    ).split(",")
+    CORS(app, resources={r"/api/*": {"origins": origini_frontend}})
 
-    app.register_blueprint(calendario.bp)
-    app.register_blueprint(schede.bp)
-    app.register_blueprint(sessione.bp)
-    app.register_blueprint(statistiche.bp)
+    from blueprints.api import register_all as register_api_blueprints
 
-    @app.context_processor
-    def inietta_globali():
-        """Valori disponibili in tutti i template."""
-        from services import ai
-        from services.pr import tipo_pr
+    register_api_blueprints(app)
 
-        return {
-            "sessione_corrente": sessione.sessione_in_corso(),
-            "oggi": date.today(),
-            "tipo_pr": tipo_pr,
-            # Senza chiavi API la sezione assistente sparisce dall'interfaccia.
-            "ai_disponibile": ai.disponibile(),
-        }
-
-    @app.template_filter("data_it")
-    def data_it(valore):
-        if valore is None:
-            return ""
-        return valore.strftime("%d/%m/%Y")
-
-    @app.template_filter("numero")
-    def numero(valore):
-        """Numeri senza zeri decimali inutili: 1.5 -> 1,5 e 2.0 -> 2."""
-        if valore is None:
-            return ""
-        return f"{valore:g}".replace(".", ",")
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def spa(path):
+        """Serve la SPA React: file statico se esiste, altrimenti index.html
+        così il routing lato client (react-router) gestisce l'URL. Le
+        richieste /api/* non arrivano mai qui — le route dei blueprint sopra
+        sono più specifiche e vincono sempre sul catch-all — ma un path
+        /api/... senza corrispondenza deve restare un 404 JSON, non la SPA.
+        """
+        if path.startswith("api/"):
+            abort(404)
+        if not os.path.isfile(os.path.join(FRONTEND_DIST, "index.html")):
+            return (
+                "Frontend non compilato: esegui `npm install` e `npm run build` "
+                "dentro frontend/, poi riavvia `python app.py`.",
+                503,
+            )
+        full = os.path.join(FRONTEND_DIST, path)
+        if path and os.path.isfile(full):
+            return send_from_directory(FRONTEND_DIST, path)
+        return send_from_directory(FRONTEND_DIST, "index.html")
 
     @app.cli.command("seed")
     def comando_seed():
@@ -81,7 +90,9 @@ def create_app():
         from seed import applica_seed
 
         db.create_all()
-        _allinea_schema()
+        colonne_nuove = _allinea_schema()
+        if ("pr", "peso_kg") in colonne_nuove:
+            _ripristina_pr_peso_kg()
         applica_seed()
 
     return app
@@ -99,6 +110,7 @@ def _allinea_schema():
 
     inspector = inspect(db.engine)
     tabelle_presenti = set(inspector.get_table_names())
+    aggiunte = set()
 
     for tabella in db.metadata.sorted_tables:
         if tabella.name not in tabelle_presenti:
@@ -113,6 +125,33 @@ def _allinea_schema():
             )
             db.session.commit()
             print(f"schema: aggiunta colonna {tabella.name}.{colonna.name}")
+            aggiunte.add((tabella.name, colonna.name))
+
+    return aggiunte
+
+
+def _ripristina_pr_peso_kg():
+    """Backfill una tantum dopo l'aggiunta di PR.peso_kg.
+
+    Le righe PR gia' salvate hanno 'valore' col vecchio significato (il peso
+    puro sollevato, non il 1RM stimato introdotto insieme a questa colonna) e
+    'peso_kg' vuoto: senza questo passaggio l'etichetta andrebbe in errore
+    formattando None, e i nuovi PR si confronterebbero con un `valore` su una
+    scala diversa dalla loro. Si ricalcola da zero lo storico PR degli
+    esercizi coinvolti: ripopola sia `valore` (1RM) sia `peso_kg` (peso reale)
+    in modo coerente, dalle serie gia' registrate.
+    """
+    from models import PR
+    from services.pr import ricalcola_pr
+
+    esercizi_ids = {
+        riga[0] for riga in db.session.query(PR.esercizio_libreria_id).distinct()
+    }
+    if not esercizi_ids:
+        return
+    ricalcola_pr(esercizi_ids)
+    db.session.commit()
+    print(f"schema: ricalcolati i PR di {len(esercizi_ids)} esercizi (nuovo 1RM stimato)")
 
 
 app = create_app()
@@ -120,6 +159,6 @@ app = create_app()
 
 if __name__ == "__main__":
     host = os.environ.get("WORKOUT_HOST", "127.0.0.1")
-    port = int(os.environ.get("WORKOUT_PORT", "5000"))
+    port = int(os.environ.get("WORKOUT_PORT", "8456"))
     print(f"\n  WorkoutTracker → http://{host}:{port}\n")
     app.run(host=host, port=port, debug=True)

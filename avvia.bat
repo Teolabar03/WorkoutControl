@@ -22,8 +22,35 @@ if not defined PY (
     exit /b 1
 )
 
-rem --- porta: da .env se presente, altrimenti 5000 -----------------------
-set "PORT=5000"
+rem --- build del frontend, solo se manca o e' piu' vecchio dei sorgenti --
+set "NEED_BUILD=0"
+if not exist "frontend\dist\index.html" set "NEED_BUILD=1"
+set "SRC_PIU_RECENTI=no"
+if "%NEED_BUILD%"=="0" for /f "usebackq delims=" %%r in (`powershell -NoProfile -Command "$dist = (Get-Item 'frontend\dist\index.html').LastWriteTime; $newest = (Get-ChildItem -Path 'frontend\src','frontend\package.json' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime; if ($newest -gt $dist) { 'si' } else { 'no' }"`) do set "SRC_PIU_RECENTI=%%r"
+if /i "!SRC_PIU_RECENTI!"=="si" set "NEED_BUILD=1"
+
+if "%NEED_BUILD%"=="1" (
+    where npm >nul 2>&1
+    if errorlevel 1 (
+        echo npm non trovato: installa Node.js per compilare il frontend, oppure
+        echo esegui a mano "npm install" e "npm run build" dentro frontend\.
+        pause
+        exit /b 1
+    )
+    echo Compilo il frontend...
+    pushd frontend
+    if not exist "node_modules" call npm install
+    call npm run build
+    popd
+    if not exist "frontend\dist\index.html" (
+        echo Build del frontend fallita: controlla i messaggi sopra.
+        pause
+        exit /b 1
+    )
+)
+
+rem --- porta: da .env se presente, altrimenti 8456 ----------------------
+set "PORT=8456"
 if exist ".env" (
     for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
         if /i "%%a"=="WORKOUT_PORT" set "PORT=%%b"

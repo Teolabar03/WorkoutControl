@@ -27,9 +27,19 @@ def tipo_pr(esercizio):
     return PR_REPS
 
 
+def _stima_1rm(peso, reps):
+    """1RM stimato (formula di Epley): cattura in un solo numero sia un peso
+    maggiore sia piu' ripetizioni allo stesso peso, cosi' fare piu' reps con
+    lo stesso carico di prima puo' contare come un vero miglioramento di
+    forza, non solo il peso massimo mai sollevato."""
+    return peso * (1 + (reps or 0) / 30)
+
+
 def _valore_serie(serie, tipo):
     if tipo == PR_WEIGHT:
-        return serie.peso_kg
+        if not serie.peso_kg:
+            return None
+        return _stima_1rm(serie.peso_kg, serie.ripetizioni)
     if tipo == PR_TIME:
         return serie.durata_secondi
     return serie.ripetizioni
@@ -67,6 +77,7 @@ def controlla_pr(serie):
             esercizio_libreria_id=esercizio.id,
             tipo=tipo,
             valore=float(valore),
+            peso_kg=serie.peso_kg if tipo == PR_WEIGHT else None,
             ripetizioni=serie.ripetizioni,
             data=serie.sessione.data,
             sessione_id=serie.sessione_id,
@@ -117,6 +128,7 @@ def ricalcola_pr(esercizi_ids):
                 esercizio_libreria_id=serie.esercizio_libreria_id,
                 tipo=tipo,
                 valore=float(valore),
+                peso_kg=serie.peso_kg if tipo == PR_WEIGHT else None,
                 ripetizioni=serie.ripetizioni,
                 data=serie.sessione.data,
                 sessione_id=serie.sessione_id,

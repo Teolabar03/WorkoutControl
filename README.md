@@ -10,13 +10,39 @@ pip install -r requirements.txt
 python app.py
 ```
 
-L'app parte su <http://127.0.0.1:5000>. Al primo avvio crea il database e ci
+L'app parte su <http://127.0.0.1:8456>. Al primo avvio crea il database e ci
 carica la libreria esercizi e le due schede prese da `Schede.txt`.
+
+Il frontend (React) va compilato una volta prima del primo avvio:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+python app.py
+```
+
+`avvia.bat` fa tutto questo da solo — compila il frontend se manca o se i
+sorgenti sono più recenti dell'ultima build, poi avvia `python app.py` — quindi
+di norma basta lanciare quello.
+
+### Sviluppo sul frontend
+
+Per lavorare sul frontend con hot-reload servono due processi in parallelo:
+
+```bash
+python app.py                 # API su :8456
+cd frontend && npm run dev    # Vite su :5173, proxy /api verso :8456
+```
+
+Si sviluppa aprendo <http://localhost:5173>; `npm run build` genera
+`frontend/dist`, servito poi da `python app.py` da solo.
 
 ### Usarla dal telefono
 
 Copia `.env.example` in `.env` (contiene già `WORKOUT_HOST=0.0.0.0`), riavvia e
-apri `http://IP-DEL-PC:5000` dal telefono collegato alla stessa rete WiFi.
+apri `http://IP-DEL-PC:8456` dal telefono collegato alla stessa rete WiFi.
 Al primo avvio del timer concedi il permesso alle notifiche: serve a sentire la
 fine del recupero anche con lo schermo spento.
 
@@ -233,12 +259,15 @@ Tre scelte non ovvie, dettate dagli esercizi reali in `Schede.txt`:
 ## Struttura
 
 ```
-app.py                  factory Flask, registrazione blueprint, comando `flask seed`
+app.py                  factory Flask, API /api/*, catch-all SPA verso frontend/dist
 models.py               modelli SQLAlchemy
-seed.py                 libreria esercizi e schede iniziali (da Schede.txt)
-blueprints/             calendario, schede, sessione attiva, statistiche
-services/               PR tracker, aggregazioni statistiche, analisi AI
-templates/  static/     UI (Jinja2, CSS mobile-first, JS vanilla, Chart.js locale)
+schemas.py               envelope risposte API, validazione marshmallow
+serializers.py            dict-builder per le risposte JSON
+seed.py                  libreria esercizi e schede iniziali (da Schede.txt)
+blueprints/api/          endpoint REST, uno per risorsa
+services/                PR tracker, aggregazioni statistiche, analisi AI
+frontend/                React + TypeScript + Vite + Tailwind + shadcn/ui
+old/                     frontend Jinja/vanilla JS precedente, tenuto per riferimento
 ```
 
 ## Variabili d'ambiente
@@ -256,7 +285,7 @@ templates/  static/     UI (Jinja2, CSS mobile-first, JS vanilla, Chart.js local
 | `OLLAMA_THINK` | disattivo | Lascia "pensare" il modello locale prima di rispondere |
 | `OLLAMA_EXE` | cercato nel PATH | Percorso di `ollama.exe`, per il pulsante di avvio |
 | `WORKOUT_HOST` | `127.0.0.1` | `0.0.0.0` per accedere dal telefono |
-| `WORKOUT_PORT` | `5000` | Porta del server |
+| `WORKOUT_PORT` | `8456` | Porta del server |
 | `WORKOUT_DB_PATH` | `instance/workout.db` | Percorso alternativo del database |
 
 Le variabili si leggono all'avvio: dopo aver modificato `.env` **ferma e
