@@ -44,6 +44,18 @@ def create_app():
         # l'utente spunta la casella in fase di accesso.
         PERMANENT_SESSION_LIFETIME=timedelta(days=90),
         SESSION_COOKIE_SAMESITE="Lax",
+        # Nome proprio (non il "session" di default di Flask) e percorso
+        # configurabile: dietro un reverse proxy l'app puo' condividere l'origin
+        # con altre app Flask (es. https://IP/ e https://IP/workout/), e con i
+        # default ognuna sovrascriverebbe il cookie di login delle altre.
+        # WORKOUT_COOKIE_PATH va valorizzato col prefisso pubblico (es.
+        # "/workout/"), che il proxy toglie prima di passare la richiesta qui.
+        SESSION_COOKIE_NAME=os.environ.get("WORKOUT_COOKIE_NAME", "workout_session"),
+        SESSION_COOKIE_PATH=os.environ.get("WORKOUT_COOKIE_PATH", "/"),
+        # Solo su HTTPS: da attivare in un deploy con certificato, non in
+        # locale, dove l'app gira in chiaro e il cookie non partirebbe mai.
+        SESSION_COOKIE_SECURE=os.environ.get("WORKOUT_COOKIE_SECURE", "").strip()
+        in ("1", "true", "True"),
         JSON_SORT_KEYS=False,
     )
 
