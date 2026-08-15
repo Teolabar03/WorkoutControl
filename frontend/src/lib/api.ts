@@ -20,6 +20,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...init?.headers },
   })
 
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    // Sessione scaduta/assente: ricarica per far ricomparire il login
+    // (App verifica /auth/me all'avvio) invece di lasciare la UI a metà.
+    window.location.reload()
+  }
+
   if (res.status === 204) {
     return undefined as T
   }

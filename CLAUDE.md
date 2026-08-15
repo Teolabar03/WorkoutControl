@@ -2,7 +2,7 @@
 
 ## Panoramica del progetto
 
-Webapp **locale** (uso personale, single-user, no login/auth) per tenere traccia degli allenamenti a casa. Deve girare in locale con `python app.py` e usare uno storage persistente su file (SQLite), niente servizi cloud richiesti — tranne, opzionalmente, la chiamata a un'API AI per l'analisi statistica.
+Webapp **locale** (uso personale, single-user) per tenere traccia degli allenamenti a casa. Deve girare in locale con `python app.py` e usare uno storage persistente su file (SQLite), niente servizi cloud richiesti — tranne, opzionalmente, la chiamata a un'API AI per l'analisi statistica. Nessun sistema di account/utenti multipli: solo un accesso protetto da **password singola condivisa** (schermata di login), necessario perché l'app gira con `WORKOUT_HOST=0.0.0.0` per essere raggiungibile dal telefono in casa e questo la espone a chiunque sia sulla stessa rete WiFi.
 
 **Contesto d'uso:** allenamenti a casa (no palestra), quindi niente concetti tipo "macchine", "sale", prenotazioni ecc. Attrezzatura presumibilmente limitata (manubri, corpo libero, elastici, panca...) — da confermare con l'utente in fase di setup iniziale.
 
@@ -12,6 +12,7 @@ Webapp **locale** (uso personale, single-user, no login/auth) per tenere traccia
 - **Database:** SQLite via SQLAlchemy (`models.py`).
 - **Frontend:** React 18 + TypeScript + Vite, styling con Tailwind CSS v4 + shadcn/ui (Radix UI). Grafici con Recharts. Routing con react-router-dom, data fetching con TanStack Query, drag&drop con @dnd-kit. Design system "Neon Graphite" (dark-native): primario arancione neon (`--primary #FF5722`) + accento verde lime per PR/highlight (`--accent #76FF03`), su superfici nero/grafite (`#121212` / `#242424`). App nativamente in dark mode (`index.html` con `class="dark"` fissa); light mode resta disponibile via token semantici in `frontend/src/index.css` ma non è il path predefinito. Tipografia Barlow Condensed/Barlow invariata.
 - **AI:** provider intercambiabili (Anthropic, Gemini, Ollama locale) via `services/ai.py`, con 24 tool di function-calling in `services/ai_tools.py` riusati sia dall'assistente sia dagli endpoint REST di scrittura, per non duplicare la logica di dominio. Chiavi da variabili d'ambiente (`.env`, mai hardcoded).
+- **Auth:** login a credenziali singole (`blueprints/api/auth.py`), username/password in `WORKOUT_USERNAME` (default `admin`) e `WORKOUT_PASSWORD` (`.env`). Sessione Flask firmata con una `SECRET_KEY` auto-generata e persistita in `instance/secret_key.txt` se `WORKOUT_SECRET_KEY` non è impostata. Un `before_request` in `app.py` blocca tutta l'API sotto `/api/*` (tranne `/api/auth/*`) finché la sessione non è autenticata; il frontend mostra `LoginPage` finché `/api/auth/me` non conferma l'accesso. Il flag "ricordami" in login decide se la sessione dura solo il browser corrente o 90 giorni.
 
 **Avvio:**
 - **Produzione locale** (comando unico invariato): `python app.py` — Flask serve `frontend/dist` (buildato) con fallback SPA per il routing client-side, oltre all'API. `avvia.bat` compila il frontend automaticamente se mancante o più vecchio dei sorgenti.

@@ -9,6 +9,7 @@ durante la Fase 1 vengono aggiunti uno alla volta.
 
 def register_all(app):
     from . import (
+        auth,
         calendario,
         chat,
         context,
@@ -20,6 +21,7 @@ def register_all(app):
         statistiche,
     )
 
+    app.register_blueprint(auth.bp)
     app.register_blueprint(schede.bp)
     app.register_blueprint(calendario.bp)
     app.register_blueprint(peso.bp)

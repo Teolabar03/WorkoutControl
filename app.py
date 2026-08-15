@@ -6,13 +6,15 @@ resto serve il build statico di React (`frontend/dist`), con fallback a
 """
 
 import os
+import secrets
+from datetime import timedelta
 
 from dotenv import load_dotenv
-from flask import Flask, abort, send_from_directory
+from flask import Flask, abort, request, send_from_directory, session
 from flask_cors import CORS
 
 from models import db
-from schemas import register_error_handlers
+from schemas import api_error, register_error_handlers
 
 load_dotenv()
 
@@ -36,13 +38,36 @@ def create_app():
     app.config.update(
         SQLALCHEMY_DATABASE_URI="sqlite:///" + percorso_db,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        # Uso locale single-user: la chiave serve solo ai messaggi flash.
-        SECRET_KEY=os.environ.get("WORKOUT_SECRET_KEY", "workout-tracker-locale"),
+        # Firma il cookie di sessione del login (vedi blueprints/api/auth.py).
+        SECRET_KEY=_secret_key(app.instance_path),
+        # "Ricordami": quanto resta valido il login su un dispositivo se
+        # l'utente spunta la casella in fase di accesso.
+        PERMANENT_SESSION_LIFETIME=timedelta(days=90),
+        SESSION_COOKIE_SAMESITE="Lax",
         JSON_SORT_KEYS=False,
     )
 
     db.init_app(app)
     register_error_handlers(app)
+
+    @app.before_request
+    def _richiedi_autenticazione():
+        """Protegge tutta l'API dietro il login a password singola.
+
+        L'app gira in genere con WORKOUT_HOST=0.0.0.0 per essere raggiungibile
+        dal telefono in casa: questo la espone a chiunque sia sulla stessa
+        rete WiFi, da qui la necessita' di un accesso protetto anche per un
+        uso single-user. Le route non-API (SPA/asset statici) restano
+        pubbliche: e' il frontend a mostrare la schermata di login finche'
+        /api/auth/me non conferma la sessione.
+        """
+        if not request.path.startswith("/api/"):
+            return None
+        if request.path.startswith("/api/auth/"):
+            return None
+        if not session.get("authenticated"):
+            return api_error("UNAUTHORIZED", "Accesso non autenticato.", 401)
+        return None
 
     # In dev il frontend Vite gira su :5173 e proxya /api verso questo
     # server: CORS serve solo come fallback (es. se il proxy non e' in uso).
@@ -96,6 +121,32 @@ def create_app():
         applica_seed()
 
     return app
+
+
+def _secret_key(instance_path):
+    """Chiave per firmare il cookie di sessione del login.
+
+    WORKOUT_SECRET_KEY in .env ha precedenza; altrimenti ne genera una e la
+    persiste in instance/secret_key.txt, cosi' non serve configurarla a mano
+    e i login restano validi tra un riavvio e l'altro (rigenerarla invalida
+    tutte le sessioni aperte).
+    """
+    dalla_env = os.environ.get("WORKOUT_SECRET_KEY")
+    if dalla_env:
+        return dalla_env
+
+    percorso = os.path.join(instance_path, "secret_key.txt")
+    if os.path.isfile(percorso):
+        with open(percorso, "r", encoding="utf-8") as f:
+            chiave = f.read().strip()
+        if chiave:
+            return chiave
+
+    os.makedirs(instance_path, exist_ok=True)
+    chiave = secrets.token_hex(32)
+    with open(percorso, "w", encoding="utf-8") as f:
+        f.write(chiave)
+    return chiave
 
 
 def _allinea_schema():

@@ -5,11 +5,13 @@ import {
   CalendarDays,
   ClipboardList,
   Dumbbell,
+  LogOut,
   NotebookPen,
   Scale,
   Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useLogout } from "@/hooks/useAuth"
 
 interface NavItem {
   to: string
@@ -32,6 +34,8 @@ function navItems(aiDisponibile: boolean): NavItem[] {
 }
 
 export function TopBar({ aiDisponibile }: { aiDisponibile: boolean }) {
+  const logout = useLogout()
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
       <div className="flex h-14 items-center gap-4 px-3 sm:px-6">
@@ -78,6 +82,16 @@ export function TopBar({ aiDisponibile }: { aiDisponibile: boolean }) {
         >
           <Settings className="size-5" aria-hidden="true" />
         </NavLink>
+
+        <button
+          type="button"
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+          aria-label="Esci"
+          className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <LogOut className="size-5" aria-hidden="true" />
+        </button>
       </div>
     </header>
   )
