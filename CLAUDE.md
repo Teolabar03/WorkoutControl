@@ -18,6 +18,37 @@ Webapp **locale** (uso personale, single-user) per tenere traccia degli allename
 - **Produzione locale** (comando unico invariato): `python app.py` — Flask serve `frontend/dist` (buildato) con fallback SPA per il routing client-side, oltre all'API. `avvia.bat` compila il frontend automaticamente se mancante o più vecchio dei sorgenti.
 - **Sviluppo**: due processi — `python app.py` (solo API su :8456) + `npm run dev` dentro `frontend/` (Vite su :5173, con proxy `/api` verso :8456, niente CORS necessario).
 
+## Deploy sulla VPS
+
+Oltre all'uso locale, l'app gira sulla VPS Netsons (`81.28.9.98`) come servizio
+systemd `workoutcontrol`, in `/var/www/workoutcontrol`, ed è raggiungibile da
+fuori casa su **https://81.28.9.98/workout/**.
+
+**Il codice si allinea solo via GitHub, mai a mano.** Un push su `main` fa
+partire un webhook che sulla VPS esegue `git reset --hard origin/main`,
+reinstalla le dipendenze, ricompila il frontend e riavvia il servizio. Quindi:
+modifica in locale → commit → `git push` → la VPS si aggiorna da sola in circa
+un minuto. Non modificare i file direttamente sulla VPS: il prossimo deploy
+cancella tutto quello che non è passato dal repo.
+
+Differenze rispetto all'esecuzione locale, tutte pilotate da variabili
+d'ambiente perché il codice resti identico nei due ambienti:
+
+- Il frontend viene compilato con `VITE_BASE=/workout/` (vedi `base` in
+  `vite.config.ts`), perché nginx serve l'app sotto quel prefisso invece che
+  sulla root — che sulla VPS è già occupata da un'altra webapp.
+- `.env` sulla VPS imposta `WORKOUT_COOKIE_PATH=/workout/` e
+  `WORKOUT_COOKIE_SECURE=1`: sullo stesso indirizzo girano più app Flask e senza
+  questo i login si scalzerebbero a vicenda.
+- Al posto di `python app.py` c'è gunicorn (1 worker, 4 thread) su
+  `127.0.0.1:5002`, dietro nginx.
+
+**Il database di riferimento è quello della VPS** (`instance/workout.db` sul
+server). È lì che finiscono gli allenamenti registrati dal telefono, quindi è
+l'unica copia buona: il `instance/` locale è solo un ambiente di prova e non va
+mai ricopiato sul server. `instance/` è in `.gitignore`, perciò i deploy
+aggiornano il codice senza toccare i dati.
+
 ## Struttura del progetto
 
 ```
