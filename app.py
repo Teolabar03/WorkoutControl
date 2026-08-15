@@ -59,6 +59,21 @@ def create_app():
         JSON_SORT_KEYS=False,
     )
 
+    # Dietro un reverse proxy `remote_addr` e' l'IP del proxy (127.0.0.1) ed e'
+    # identico per ogni visitatore: il blocco anti-forza-bruta del login
+    # (blueprints/api/auth.py) finirebbe per chiudere fuori tutti insieme
+    # invece del singolo attaccante. ProxyFix legge l'IP vero dagli header
+    # X-Forwarded-*, ma solo un proxy fidato puo' scriverli: da qui il numero
+    # di hop, da valorizzare unicamente se davanti c'e' davvero un proxy.
+    # Lasciato a 0 in locale, dove quegli header sarebbero falsificabili.
+    hop_proxy = int(os.environ.get("WORKOUT_PROXY_HOPS", "0") or 0)
+    if hop_proxy > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=hop_proxy, x_proto=hop_proxy, x_host=hop_proxy
+        )
+
     db.init_app(app)
     register_error_handlers(app)
 
