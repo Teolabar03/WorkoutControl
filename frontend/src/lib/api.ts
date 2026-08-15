@@ -14,8 +14,12 @@ export class ApiError extends Error {
 type Envelope<T> = { data: T; meta?: unknown }
 type ErrorEnvelope = { error: { code: string; message: string; fields?: unknown } }
 
+// Prefisso di deploy (vedi `base` in vite.config.ts): '/' in locale, '/workout/'
+// sulla VPS dietro nginx. Termina sempre con '/', quindi niente slash extra qui.
+const API_BASE = `${import.meta.env.BASE_URL}api`
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   })
