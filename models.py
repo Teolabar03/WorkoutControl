@@ -283,8 +283,14 @@ class PR(db.Model):
         db.Integer, db.ForeignKey("esercizio_libreria.id"), nullable=False, index=True
     )
     tipo = db.Column(db.String(20), nullable=False, default=PR_WEIGHT)
+    # Per tipo == PR_WEIGHT, il 1RM stimato (Epley): serve solo a confrontare i
+    # record fra loro, non e' un peso realmente sollevato. Per gli altri tipi
+    # e' il valore vero e proprio (secondi o ripetizioni).
     valore = db.Column(db.Float, nullable=False)
-    # Ripetizioni a cui e' stato fatto il record di peso (contesto utile).
+    # Peso realmente sollevato quando tipo == PR_WEIGHT: e' quello mostrato in
+    # etichetta, perche' l'utente deve vedere il peso vero, non il 1RM stimato.
+    peso_kg = db.Column(db.Float, nullable=True)
+    # Ripetizioni a cui e' stato fatto il record (contesto utile).
     ripetizioni = db.Column(db.Integer, nullable=True)
     data = db.Column(db.Date, nullable=False, default=date.today)
     sessione_id = db.Column(db.Integer, db.ForeignKey("sessione.id"), nullable=True)
@@ -296,7 +302,7 @@ class PR(db.Model):
     def etichetta(self):
         if self.tipo == PR_WEIGHT:
             reps = f" x {self.ripetizioni}" if self.ripetizioni else ""
-            return f"{self.valore:g} kg{reps}"
+            return f"{self.peso_kg:g} kg{reps}"
         if self.tipo == PR_TIME:
             return f"{self.valore:g} sec"
         return f"{self.valore:g} rip."

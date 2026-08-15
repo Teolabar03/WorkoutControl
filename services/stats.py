@@ -4,7 +4,7 @@ Ogni funzione restituisce strutture pronte per Chart.js e per i template,
 e resta corretta anche con database vuoto (liste vuote, mai eccezioni).
 """
 
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from datetime import date, timedelta
 
 from models import (
@@ -29,25 +29,41 @@ def sessioni_completate(limite=None):
     return query.all()
 
 
+def _sessioni_per_giorno(limite=None):
+    """Sessioni completate raggruppate per giorno, dalla piu' recente.
+
+    Piu' sessioni nello stesso giorno (es. una scheda spezzata in due) contano
+    come un solo allenamento in tutte le statistiche, non solo nel riepilogo.
+    """
+    per_giorno = OrderedDict()
+    for sessione in sessioni_completate():
+        per_giorno.setdefault(sessione.data, []).append(sessione)
+    giorni = list(per_giorno.items())
+    if limite:
+        giorni = giorni[:limite]
+    return giorni
+
+
 def volume_nel_tempo():
-    """Carico totale (kg) per sessione, dalla piu' vecchia alla piu' recente.
+    """Carico totale (kg) per giorno, dal piu' vecchio al piu' recente.
 
     Include solo gli esercizi con peso: elastico e corpo libero non hanno un
     carico misurabile in kg e vengono seguiti con `ripetizioni_nel_tempo`.
     """
     labels, valori = [], []
-    for sessione in reversed(sessioni_completate()):
-        labels.append(sessione.data.isoformat())
-        valori.append(round(sessione.volume_kg, 1))
+    for giorno, sessioni in reversed(_sessioni_per_giorno()):
+        labels.append(giorno.isoformat())
+        valori.append(round(sum(s.volume_kg for s in sessioni), 1))
     return {"labels": labels, "valori": valori}
 
 
 def ripetizioni_nel_tempo():
-    """Ripetizioni totali per sessione: copre anche elastico e corpo libero."""
+    """Ripetizioni totali per giorno: copre anche elastico e corpo libero."""
     labels, valori = [], []
-    for sessione in reversed(sessioni_completate()):
-        labels.append(sessione.data.isoformat())
-        valori.append(sum(s.ripetizioni or 0 for s in sessione.serie))
+    for giorno, sessioni in reversed(_sessioni_per_giorno()):
+        totale = sum(s.ripetizioni or 0 for sessione in sessioni for s in sessione.serie)
+        labels.append(giorno.isoformat())
+        valori.append(totale)
     return {"labels": labels, "valori": valori}
 
 
@@ -91,7 +107,10 @@ def progressione_esercizio(esercizio_id):
 
 
 def frequenza_settimanale(settimane=12):
-    """Numero di allenamenti per settimana nelle ultime N settimane."""
+    """Numero di allenamenti per settimana nelle ultime N settimane.
+
+    Più sessioni nello stesso giorno contano come un solo allenamento.
+    """
     oggi = date.today()
     lunedi_corrente = oggi - timedelta(days=oggi.weekday())
     conteggi = OrderedDict()
@@ -99,13 +118,14 @@ def frequenza_settimanale(settimane=12):
         inizio = lunedi_corrente - timedelta(weeks=indietro)
         conteggi[inizio] = 0
 
-    prima_settimana = next(iter(conteggi), lunedi_corrente)
+    giorni_visti = set()
     for sessione in db.session.query(Sessione).filter_by(completata=True).all():
+        if sessione.data in giorni_visti:
+            continue
+        giorni_visti.add(sessione.data)
         inizio = sessione.data - timedelta(days=sessione.data.weekday())
         if inizio in conteggi:
             conteggi[inizio] += 1
-        elif inizio < prima_settimana:
-            continue
 
     return {
         "labels": [d.strftime("%d/%m") for d in conteggi],
@@ -114,18 +134,36 @@ def frequenza_settimanale(settimane=12):
 
 
 def aderenza_schede(limite=15):
-    """Percentuale di serie completate rispetto al target, per sessione."""
+    """Percentuale di serie completate rispetto al target, per giorno.
+
+    Se lo stesso giorno ha piu' sessioni su piu' schede, il target e' la
+    somma dei target di ciascuna scheda coinvolta quel giorno.
+    """
     labels, valori = [], []
-    for sessione in reversed(sessioni_completate(limite)):
-        if not sessione.scheda:
+    for giorno, sessioni in reversed(_sessioni_per_giorno(limite)):
+        schede = {s.scheda.id: s.scheda for s in sessioni if s.scheda}
+        if not schede:
             continue
-        target = sum(e.serie_target for e in sessione.scheda.esercizi)
+        target = sum(sum(e.serie_target for e in scheda.esercizi) for scheda in schede.values())
         if target == 0:
             continue
-        fatte = len(sessione.serie)
-        labels.append(sessione.data.isoformat())
+        fatte = sum(len(s.serie) for s in sessioni)
+        labels.append(giorno.isoformat())
         valori.append(round(min(fatte / target, 1.5) * 100, 1))
     return {"labels": labels, "valori": valori}
+
+
+def aderenza_riepilogo(limite=15):
+    """Media di aderenza sulle ultime N sessioni con scheda, come testo pronto.
+
+    Il grafico a barre da solo non dice se il complesso e' buono o no: qui si
+    riduce a una singola percentuale leggibile a colpo d'occhio.
+    """
+    dati = aderenza_schede(limite)
+    if not dati["valori"]:
+        return None
+    media = sum(dati["valori"]) / len(dati["valori"])
+    return {"media": round(media, 1), "n_sessioni": len(dati["valori"])}
 
 
 def andamento_peso_corporeo():
@@ -137,16 +175,18 @@ def andamento_peso_corporeo():
 
 
 def riepilogo():
-    """Numeri di sintesi mostrati in cima alla pagina statistiche."""
+    """Numeri di sintesi mostrati in cima alla pagina statistiche.
+
+    Più sessioni nello stesso giorno contano come un solo allenamento.
+    """
     completate = sessioni_completate()
+    giorni_allenamento = {s.data for s in completate}
     volume_totale = sum(s.volume_kg for s in completate)
-    ultimi_30 = [
-        s for s in completate if (date.today() - s.data).days <= 30
-    ]
+    giorni_30 = {s.data for s in completate if (date.today() - s.data).days <= 30}
     durate = [s.durata_minuti for s in completate if s.durata_minuti]
     return {
-        "totale_sessioni": len(completate),
-        "sessioni_30_giorni": len(ultimi_30),
+        "totale_sessioni": len(giorni_allenamento),
+        "sessioni_30_giorni": len(giorni_30),
         "volume_totale_kg": round(volume_totale, 1),
         "durata_media_min": round(sum(durate) / len(durate)) if durate else None,
         "ultima_sessione": completate[0].data if completate else None,
@@ -167,21 +207,3 @@ def esercizi_con_dati():
         .order_by(EsercizioLibreria.nome)
         .all()
     )
-
-
-def dolori_per_esercizio():
-    """Quante volte ogni esercizio compare in sessioni con un dolore segnalato.
-
-    Segnale grezzo di co-occorrenza: la correlazione vera la fa l'analisi AI,
-    qui serve solo a dare un ordine di grandezza nella vista diario.
-    """
-    conteggi = defaultdict(int)
-    sessioni = (
-        db.session.query(Sessione)
-        .filter(Sessione.note_dolore.any())
-        .all()
-    )
-    for sessione in sessioni:
-        for nome in {s.esercizio.nome for s in sessione.serie}:
-            conteggi[nome] += 1
-    return sorted(conteggi.items(), key=lambda kv: kv[1], reverse=True)

@@ -8,30 +8,42 @@ Webapp **locale** (uso personale, single-user, no login/auth) per tenere traccia
 
 ## Stack tecnico
 
-- **Backend:** Python 3 + Flask
-- **Database:** SQLite (via `sqlite3` o SQLAlchemy — preferire SQLAlchemy per migrazioni più facili)
-- **Frontend:** template Jinja2 + HTML/CSS/JS vanilla (niente framework JS pesante, la app deve restare semplice e locale). Va bene un tocco di libreria leggera (es. Chart.js via CDN) per i grafici statistiche.
-- **AI:** chiamata a API Anthropic (Claude) per la sezione statistiche/consigli. Chiave API da leggere da variabile d'ambiente (`.env`, mai hardcoded).
+- **Backend:** Python 3 + Flask, esposto come **pura API JSON** sotto `/api/*` (envelope uniforme `{"data": ...}` / `{"error": {...}}`, vedi `schemas.py`). Nessun rendering HTML lato server.
+- **Database:** SQLite via SQLAlchemy (`models.py`).
+- **Frontend:** React 18 + TypeScript + Vite, styling con Tailwind CSS v4 + shadcn/ui (Radix UI). Grafici con Recharts. Routing con react-router-dom, data fetching con TanStack Query, drag&drop con @dnd-kit. Design system "Neon Graphite" (dark-native): primario arancione neon (`--primary #FF5722`) + accento verde lime per PR/highlight (`--accent #76FF03`), su superfici nero/grafite (`#121212` / `#242424`). App nativamente in dark mode (`index.html` con `class="dark"` fissa); light mode resta disponibile via token semantici in `frontend/src/index.css` ma non è il path predefinito. Tipografia Barlow Condensed/Barlow invariata.
+- **AI:** provider intercambiabili (Anthropic, Gemini, Ollama locale) via `services/ai.py`, con 24 tool di function-calling in `services/ai_tools.py` riusati sia dall'assistente sia dagli endpoint REST di scrittura, per non duplicare la logica di dominio. Chiavi da variabili d'ambiente (`.env`, mai hardcoded).
 
-## Struttura del progetto (proposta)
+**Avvio:**
+- **Produzione locale** (comando unico invariato): `python app.py` — Flask serve `frontend/dist` (buildato) con fallback SPA per il routing client-side, oltre all'API. `avvia.bat` compila il frontend automaticamente se mancante o più vecchio dei sorgenti.
+- **Sviluppo**: due processi — `python app.py` (solo API su :8456) + `npm run dev` dentro `frontend/` (Vite su :5173, con proxy `/api` verso :8456, niente CORS necessario).
+
+## Struttura del progetto
 
 ```
-workout-tracker/
-├── app.py
-├── models.py
+WorkoutControl/
+├── app.py                  # factory Flask, API /api/*, catch-all SPA verso frontend/dist
+├── models.py                # modelli SQLAlchemy
+├── schemas.py                # envelope api_ok/api_error, schema marshmallow di validazione
+├── serializers.py             # dict-builder per le risposte JSON
 ├── requirements.txt
 ├── .env.example
 ├── instance/
 │   └── workout.db
-├── templates/
-│   ├── base.html
-│   ├── calendar.html
-│   ├── schede.html
-│   ├── sessione.html
-│   └── statistiche.html
-├── static/
-│   ├── css/
-│   └── js/
+├── blueprints/
+│   └── api/                  # blueprint REST, uno per risorsa (schede, sessione, statistiche, chat, ...)
+├── services/
+│   ├── pr.py                  # motore record personali
+│   ├── stats.py                # aggregazioni per i grafici
+│   ├── ai.py                   # orchestrazione provider AI
+│   └── ai_tools.py             # tool di function-calling, riusati anche dall'API REST
+├── frontend/                  # progetto Vite/React/TypeScript
+│   ├── src/
+│   │   ├── api/                 # client fetch + tipi per risorsa
+│   │   ├── hooks/                # hook TanStack Query
+│   │   ├── components/            # ui/ (shadcn) + componenti di dominio
+│   │   └── pages/                 # una per rotta
+│   └── dist/                     # build di produzione, servito da app.py (generato, non versionato)
+├── old/                       # frontend Jinja/vanilla JS precedente la migrazione a React, tenuto per riferimento
 └── CLAUDE.md
 ```
 
@@ -99,9 +111,10 @@ workout-tracker/
 ## Convenzioni di sviluppo
 
 - Codice in italiano o inglese: **scegli inglese per nomi di variabili/funzioni**, italiano va bene solo per testi mostrati all'utente (UI).
-- Nessuna autenticazione richiesta (uso singolo utente locale), ma strutturare comunque il codice in modo pulito (blueprint Flask separati per calendar/schede/sessione/stats).
+- Nessuna autenticazione richiesta (uso singolo utente locale), ma strutturare comunque il codice in modo pulito: blueprint Flask separati per risorsa sotto `blueprints/api/` (schede, calendario, sessione, statistiche, peso, diario, chat, impostazioni), consumati dal frontend React — non più `render_template`.
+- Le mutazioni lato API riusano le funzioni di dominio di `services/ai_tools.py` (usate anche dal tool-calling dell'assistente) invece di duplicare la logica scrittura/validazione.
 - Gestire bene i casi vuoti (nessuna scheda ancora creata, nessun allenamento nel mese).
-- Mobile-friendly: molto probabilmente userai il telefono/tablet durante l'allenamento in casa per inserire pesi in tempo reale, quindi il CSS deve essere responsive fin dall'inizio.
+- Mobile-friendly: molto probabilmente userai il telefono/tablet durante l'allenamento in casa per inserire pesi in tempo reale, quindi il layout React/Tailwind deve restare responsive fin dall'inizio (breakpoint 375/768/1024/1440, touch target ≥44px).
 
 ## Da confermare con l'utente prima di iniziare
 
