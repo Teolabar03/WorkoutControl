@@ -38,13 +38,13 @@ export function TopBar({ aiDisponibile }: { aiDisponibile: boolean }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
-      <div className="flex h-14 items-center gap-4 px-3 sm:px-6">
+      <div className="flex h-14 items-center gap-2 px-3 sm:gap-4 sm:px-6">
         <NavLink
           to="/calendario"
           className="flex shrink-0 items-center gap-2 font-heading text-lg font-semibold tracking-tight"
         >
           <Dumbbell className="size-5 text-primary" aria-hidden="true" />
-          WorkoutTracker
+          <span className="hidden sm:inline">WorkoutTracker</span>
         </NavLink>
 
         <nav

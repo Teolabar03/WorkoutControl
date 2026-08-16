@@ -38,16 +38,16 @@ export function CalendarioPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-2xl font-semibold">Calendario</h1>
         {context?.sessione_corrente ? (
           <Button onClick={() => navigate(`/sessione/${context.sessione_corrente!.id}`)}>
             Riprendi allenamento
           </Button>
         ) : (
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <Select value={schedaScelta} onValueChange={setSchedaScelta}>
-              <SelectTrigger className="w-[200px]" aria-label="Scegli scheda">
+              <SelectTrigger className="flex-1 sm:w-[200px] sm:flex-none" aria-label="Scegli scheda">
                 <SelectValue placeholder="Allenamento libero" />
               </SelectTrigger>
               <SelectContent>

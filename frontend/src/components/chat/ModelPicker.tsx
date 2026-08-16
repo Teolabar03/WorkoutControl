@@ -9,7 +9,7 @@ export function ModelPicker() {
 
   return (
     <Select value={catalogo.attivo || "auto"} onValueChange={(v) => cambia.mutate(v === "auto" ? "" : v)}>
-      <SelectTrigger size="sm" className="w-[220px]" aria-label="Modello assistente">
+      <SelectTrigger size="sm" className="w-[130px] sm:w-[220px]" aria-label="Modello assistente">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
