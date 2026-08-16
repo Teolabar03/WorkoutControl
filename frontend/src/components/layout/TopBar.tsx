@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { NavLink } from "react-router-dom"
 import {
   BarChart3,
@@ -6,12 +7,15 @@ import {
   ClipboardList,
   Dumbbell,
   LogOut,
+  Menu,
   NotebookPen,
   Scale,
   Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLogout } from "@/hooks/useAuth"
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 interface NavItem {
   to: string
@@ -35,23 +39,35 @@ function navItems(aiDisponibile: boolean): NavItem[] {
 
 export function TopBar({ aiDisponibile }: { aiDisponibile: boolean }) {
   const logout = useLogout()
+  const [menuAperto, setMenuAperto] = useState(false)
+  const items = navItems(aiDisponibile)
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
-      <div className="flex h-14 items-center gap-2 px-3 sm:gap-4 sm:px-6">
+      <div className="flex h-14 items-center gap-4 px-3 sm:px-6">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 sm:hidden"
+          onClick={() => setMenuAperto(true)}
+          aria-label="Apri menu"
+        >
+          <Menu className="size-5" />
+        </Button>
+
         <NavLink
           to="/calendario"
           className="flex shrink-0 items-center gap-2 font-heading text-lg font-semibold tracking-tight"
         >
           <Dumbbell className="size-5 text-primary" aria-hidden="true" />
-          <span className="hidden sm:inline">WorkoutTracker</span>
+          WorkoutTracker
         </NavLink>
 
         <nav
-          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:gap-2"
+          className="hidden min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex sm:gap-2"
           aria-label="Navigazione principale"
         >
-          {navItems(aiDisponibile).map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -69,30 +85,65 @@ export function TopBar({ aiDisponibile }: { aiDisponibile: boolean }) {
           ))}
         </nav>
 
-        <NavLink
-          to="/impostazioni"
-          aria-label="Impostazioni"
-          className={({ isActive }) =>
-            cn(
-              "shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              isActive && "bg-muted text-foreground"
-            )
-          }
-        >
-          <Settings className="size-5" aria-hidden="true" />
-        </NavLink>
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0 sm:gap-4">
+          <NavLink
+            to="/impostazioni"
+            aria-label="Impostazioni"
+            className={({ isActive }) =>
+              cn(
+                "shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                isActive && "bg-muted text-foreground"
+              )
+            }
+          >
+            <Settings className="size-5" aria-hidden="true" />
+          </NavLink>
 
-        <button
-          type="button"
-          onClick={() => logout.mutate()}
-          disabled={logout.isPending}
-          aria-label="Esci"
-          className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
-        >
-          <LogOut className="size-5" aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+            aria-label="Esci"
+            className="shrink-0 rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+          >
+            <LogOut className="size-5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
+
+      <Sheet open={menuAperto} onOpenChange={setMenuAperto}>
+        <SheetContent side="left" className="flex flex-col sm:hidden">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Dumbbell className="size-5 text-primary" aria-hidden="true" />
+              WorkoutTracker
+            </SheetTitle>
+          </SheetHeader>
+          <nav
+            className="flex flex-col gap-1 overflow-y-auto px-4 pb-4"
+            aria-label="Navigazione principale"
+            onClick={(e) => (e.target as HTMLElement).closest("a") && setMenuAperto(false)}
+          >
+            {items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  cn(
+                    "flex min-h-11 items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted hover:text-foreground",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                    isActive ? "bg-muted text-foreground" : "text-muted-foreground"
+                  )
+                }
+              >
+                <item.icon className="size-4 shrink-0" aria-hidden="true" />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        </SheetContent>
+      </Sheet>
     </header>
   )
 }
