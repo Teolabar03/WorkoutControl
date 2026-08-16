@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Plus, Send } from "lucide-react"
+import { Menu, Plus, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { ChatBubble } from "@/components/chat/ChatBubble"
 import { ModelPicker } from "@/components/chat/ModelPicker"
 import { ConversationSidebar } from "@/components/chat/ConversationSidebar"
@@ -35,6 +36,7 @@ export function ChatPage() {
   const rigenera = useRigenera(id ?? -1)
 
   const [testo, setTesto] = useState("")
+  const [menuAperto, setMenuAperto] = useState(false)
   const [inModifica, setInModifica] = useState(false)
   const [testoModifica, setTestoModifica] = useState("")
   const [azioniPerse, setAzioniPerse] = useState<string[] | null>(null)
@@ -118,9 +120,44 @@ export function ChatPage() {
         <ConversationSidebar attivaId={id} />
       </aside>
 
+      <Sheet open={menuAperto} onOpenChange={setMenuAperto}>
+        <SheetContent side="left" className="flex flex-col">
+          <SheetHeader>
+            <SheetTitle>Conversazioni</SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-col gap-3 overflow-y-auto px-4 pb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                setMenuAperto(false)
+                nuovaConversazione.mutate(undefined, { onSuccess: (c) => navigate(`/chat/${c.id}`) })
+              }}
+            >
+              <Plus className="size-4" /> Nuova conversazione
+            </Button>
+            <div onClick={(e) => (e.target as HTMLElement).closest("a") && setMenuAperto(false)}>
+              <ConversationSidebar attivaId={id} />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <div className="flex h-[calc(100svh-8rem)] flex-col rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between gap-2 border-b border-border p-3">
-          <h1 className="font-heading text-lg font-semibold">Assistente AI</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 lg:hidden"
+              onClick={() => setMenuAperto(true)}
+              aria-label="Conversazioni"
+            >
+              <Menu className="size-4" />
+            </Button>
+            <h1 className="truncate font-heading text-lg font-semibold">Assistente AI</h1>
+          </div>
           <ModelPicker />
         </div>
 
