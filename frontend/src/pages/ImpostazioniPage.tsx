@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import {
   Select,
@@ -30,11 +31,13 @@ export function ImpostazioniPage() {
 
   const [timer, setTimer] = useState("")
   const [nSessioni, setNSessioni] = useState("")
+  const [attrezzatura, setAttrezzatura] = useState("")
 
   useEffect(() => {
     if (impostazioni) {
       setTimer(impostazioni.timer_default_sec.toString())
       setNSessioni(impostazioni.analisi_n_sessioni.toString())
+      setAttrezzatura(impostazioni.attrezzatura_disponibile)
     }
   }, [impostazioni])
 
@@ -43,6 +46,7 @@ export function ImpostazioniPage() {
     modifica.mutate({
       timer_default_sec: Number(timer),
       analisi_n_sessioni: Number(nSessioni),
+      attrezzatura_disponibile: attrezzatura,
     })
   }
 
@@ -59,6 +63,21 @@ export function ImpostazioniPage() {
         <div className="space-y-1.5">
           <Label htmlFor="imp-n">Allenamenti recenti nel contesto AI (1-100)</Label>
           <Input id="imp-n" inputMode="numeric" value={nSessioni} onChange={(e) => setNSessioni(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="imp-attrezzatura">Attrezzatura a disposizione</Label>
+          <Textarea
+            id="imp-attrezzatura"
+            rows={4}
+            maxLength={1000}
+            value={attrezzatura}
+            onChange={(e) => setAttrezzatura(e.target.value)}
+            placeholder="Es. due manubri da 1.5 kg, due da 0.5 kg, un elastico, un tappetino"
+          />
+          <p className="text-sm text-muted-foreground">
+            L'assistente AI la legge prima di rispondere: non ti consiglia attrezzi che non hai. Lascia vuoto se
+            preferisci che la deduca dagli esercizi in libreria.
+          </p>
         </div>
         <Button type="submit" disabled={modifica.isPending}>
           Salva

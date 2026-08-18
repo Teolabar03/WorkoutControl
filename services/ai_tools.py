@@ -1193,3 +1193,47 @@ def imposta_preferenza(chiave, valore):
     Impostazione.set(chiave, numero)
     db.session.commit()
     return {"_azione": f"Impostato {chiave} = {numero}", chiave: numero}
+
+
+# Massimo per l'attrezzatura: e' un elenco di attrezzi, non un tema. Serve solo
+# a non gonfiare il prompt di sistema, che se la porta dietro a ogni richiesta.
+MAX_ATTREZZATURA = 1000
+
+
+@strumento(
+    "imposta_attrezzatura",
+    "Aggiorna la descrizione dell'attrezzatura che la persona ha in casa "
+    "(quella che vedi nelle tue istruzioni). Usalo quando ti dice di aver "
+    "comprato, perso o smesso di usare un attrezzo. Riscrivi sempre l'elenco "
+    "completo, non solo la parte nuova.",
+    {
+        "type": "object",
+        "properties": {
+            "descrizione": {
+                "type": "string",
+                "description": (
+                    "Testo libero, es. «due manubri da 1.5 kg, due da 0.5 kg, "
+                    "un elastico, una panca». Vuoto la azzera."
+                ),
+            },
+        },
+        "required": ["descrizione"],
+    },
+    scrive=True,
+)
+def imposta_attrezzatura(descrizione):
+    if descrizione is not None and not isinstance(descrizione, str):
+        raise ErroreStrumento("L'attrezzatura va descritta a parole.")
+    testo = (descrizione or "").strip()
+    if len(testo) > MAX_ATTREZZATURA:
+        raise ErroreStrumento(
+            f"La descrizione dell'attrezzatura non puo' superare i "
+            f"{MAX_ATTREZZATURA} caratteri."
+        )
+
+    Impostazione.set("attrezzatura_disponibile", testo)
+    db.session.commit()
+    return {
+        "_azione": "Aggiornata l'attrezzatura disponibile",
+        "attrezzatura_disponibile": testo,
+    }
