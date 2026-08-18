@@ -28,11 +28,20 @@ class Impostazione(db.Model):
     __tablename__ = "impostazione"
 
     chiave = db.Column(db.String(64), primary_key=True)
-    valore = db.Column(db.String(255), nullable=False)
+    # Text e non String: l'attrezzatura e' un testo libero scritto dall'utente,
+    # non un numero o un id come le altre preferenze.
+    valore = db.Column(db.Text, nullable=False)
 
     DEFAULTS = {
         "timer_default_sec": "90",
         "analisi_n_sessioni": "10",
+        # Attrezzatura disponibile in casa, in testo libero: finisce nelle
+        # istruzioni dell'assistente AI perche' non consigli attrezzi che non
+        # ci sono. Questo e' solo il valore iniziale, si cambia da Impostazioni.
+        "attrezzatura_disponibile": (
+            "Due manubri da 1.5 kg, due manubri da 0.5 kg e un elastico. "
+            "Niente bilancieri, macchinari o carichi pesanti."
+        ),
         # Modello locale scelto dalle Impostazioni. Vuoto vuol dire "quello di
         # OLLAMA_MODEL in .env": il predefinito resta nell'ambiente, qui finisce
         # solo una scelta esplicita.

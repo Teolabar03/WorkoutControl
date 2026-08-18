@@ -92,6 +92,18 @@ l'assistente risponde vedendo le ultime sedute con serie, pesi e note, il diario
 dolori e il peso corporeo. Le conversazioni restano salvate e si rileggono nel
 tempo.
 
+### L'attrezzatura che hai in casa
+
+In *Impostazioni → Attrezzatura a disposizione* si scrive, in linguaggio
+naturale, cosa c'è davvero in casa (*"due manubri da 1,5 kg, due da 0,5 kg, un
+elastico"*). Il testo finisce nelle istruzioni dell'assistente a ogni domanda,
+così non consiglia bilancieri o macchinari che non hai e propone progressi con
+quello che c'è. Se compri qualcosa basta aggiornarlo lì — o dirglielo in chat,
+che se lo riscrive da solo.
+
+Lasciandolo vuoto, l'assistente deduce l'attrezzatura dal campo *attrezzatura*
+degli esercizi in libreria.
+
 ### Cosa può fare, oltre a rispondere
 
 L'assistente non è in sola lettura: ha accesso all'app tramite una serie di
@@ -103,7 +115,7 @@ strumenti e può **fare le cose al posto tuo**.
 | Libreria | Cercare esercizi per nome, gruppo muscolare o attrezzatura; aggiungerne di nuovi |
 | Calendario | Elencare e leggere gli allenamenti, registrarne di nuovi, correggere una singola serie, spostare la data, eliminarli |
 | Peso e dolori | Registrare una misurazione, aggiungere una nota al diario |
-| Preferenze | Cambiare il timer di recupero di default e quanti allenamenti tenere nel contesto |
+| Preferenze | Cambiare il timer di recupero di default, quanti allenamenti tenere nel contesto e l'attrezzatura disponibile |
 
 Esempi di richieste che ora funzionano: *"crea una scheda per la schiena con
 quello che ho in casa"*, *"le alzate laterali del 28/7 erano da 1,5 kg, non

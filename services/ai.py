@@ -134,15 +134,27 @@ VERBI_SCRITTURA = (
     "salva",
 )
 
+# Che attrezzatura ci sia in casa non sta nel codice: lo scrive l'utente da
+# Impostazioni e prende il posto del segnaposto mentre si costruisce il prompt.
+ATTREZZATURA_SEGNAPOSTO = "<<ATTREZZATURA>>"
+
+ATTREZZATURA_NOTA = """Attrezzatura a disposizione, come l'ha descritta lei: \
+{descrizione}
+Non suggerire attrezzi che non compaiono in quella descrizione: dai per scontato \
+che non li abbia. Dove il carico non si puo' aumentare, i progressi passano da \
+ripetizioni, tempo sotto tensione, controllo dell'esecuzione, densita' e varianti \
+piu' difficili, non dal semplice aumento del peso."""
+
+ATTREZZATURA_IGNOTA = """Non sai che attrezzatura abbia: ricavala dal campo \
+`attrezzatura` degli esercizi in libreria e nelle schede, e non dare per scontato \
+che abbia bilancieri o macchinari. Se ti serve saperlo per rispondere, \
+chiediglielo, e ricordagli che puo' scriverla in Impostazioni."""
+
 ISTRUZIONI = """Sei l'assistente di allenamento di una persona che si allena a \
 casa. Rispondi alle sue domande basandoti sui dati di allenamento che trovi qui \
 sotto, e comportati come un preparatore che conosce la sua storia.
 
-Contesto sull'attrezzatura disponibile: due manubri da 1.5 kg, due da 0.5 kg e \
-un elastico. Non ci sono bilancieri, macchinari o carichi pesanti: i progressi \
-passano da ripetizioni, tempo sotto tensione, controllo dell'esecuzione, \
-densita' e varianti piu' difficili, non dal semplice aumento del carico. Non \
-suggerire attrezzi che la persona non ha.
+<<ATTREZZATURA>>
 
 Note di lettura dei dati:
 - `peso_kg` e' il peso del SINGOLO manubrio; `carichi_per_serie` dice quanti se \
@@ -780,10 +792,21 @@ def costruisci_payload(n_sessioni):
     return payload, [s.id for s in sessioni]
 
 
+def _istruzioni():
+    """Le istruzioni di sistema, con l'attrezzatura scelta nelle Impostazioni."""
+    descrizione = (Impostazione.get("attrezzatura_disponibile") or "").strip()
+    blocco = (
+        ATTREZZATURA_NOTA.format(descrizione=descrizione)
+        if descrizione
+        else ATTREZZATURA_IGNOTA
+    )
+    return ISTRUZIONI.replace(ATTREZZATURA_SEGNAPOSTO, blocco)
+
+
 def _testo_sistema(payload):
     """Istruzioni + dati di allenamento, in un unico testo."""
     return (
-        ISTRUZIONI
+        _istruzioni()
         + "\n\n# Dati di allenamento\n\n```json\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
         + "\n```"
