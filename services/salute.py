@@ -203,22 +203,35 @@ def _ingerisci_pasto(record):
     )
 
 
+def registra_peso_se_manca(kg, giorno, note=""):
+    """Salva il peso solo se quel giorno non ne ha gia' uno.
+
+    La tabella ammette una misura al giorno, quindi il peso che arriva da
+    Samsung e quello digitato a mano si contendono la stessa riga. Vince chi
+    c'era prima: una misura scritta a mano e' un gesto deliberato, spesso con
+    una nota che la spiega ("post pasto", "pesata dubbia"), e sovrascriverla
+    distruggerebbe un dato che l'utente non puo' recuperare da nessuna parte.
+    Per farla rimpiazzare basta cancellarla dall'app.
+
+    Torna comunque True quando la misura e' stata riconosciuta, anche se non
+    scritta: i conteggi descrivono quello che la sorgente conteneva, e devono
+    restare identici se si reimporta lo stesso file.
+    """
+    if not kg or kg <= 0 or giorno is None:
+        return None
+    if db.session.query(PesoCorporeo).filter_by(data=giorno).first() is not None:
+        return True
+    registra_peso_corporeo(valore_kg=kg, data=giorno.isoformat(), note=note)
+    return True
+
+
 def _ingerisci_peso(record):
     """Il peso confluisce nella tabella che l'app usa gia', non in una nuova."""
     kg = _numero(_primo(record, "kilograms", "weight_kilograms", "kg"))
     momento = _dt(_primo(record, "time", "start_time", "startTime"))
-    if not kg or kg <= 0 or momento is None:
+    if momento is None:
         return None
-
-    # La nota della misura e' scritta a mano dall'utente: va riportata tale e
-    # quale, altrimenti ogni sincronizzazione la cancellerebbe.
-    esistente = db.session.query(PesoCorporeo).filter_by(data=momento.date()).first()
-    registra_peso_corporeo(
-        valore_kg=kg,
-        data=momento.date().isoformat(),
-        note=esistente.note if esistente else "",
-    )
-    return True
+    return registra_peso_se_manca(kg, momento.date())
 
 
 def ingerisci_health_connect(payload):
