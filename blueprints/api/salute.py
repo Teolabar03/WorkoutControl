@@ -79,7 +79,9 @@ def ingest_route():
         # che non riconosciamo. Si annota la FORMA del payload — nomi delle
         # chiavi e quanti elementi ciascuna — mai i valori, che sono dati
         # sanitari. Senza, l'unica alternativa sarebbe tirare a indovinare.
-        current_app.logger.info(
+        # warning e non info: in produzione il logger di Flask sta a WARNING e
+        # una riga info verrebbe scartata in silenzio, proprio quando serve.
+        current_app.logger.warning(
             "Ingest senza dati utili: %s",
             {
                 chiave: (len(valore) if isinstance(valore, list) else type(valore).__name__)
