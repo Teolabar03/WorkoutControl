@@ -1238,7 +1238,8 @@ def aggiungi_nota_dolore(zona_corporea, descrizione="", gravita=1, data=None,
     "tenere nel contesto dell'assistente, 1-100), altezza_cm (serve al BMI) e i "
     "target giornalieri target_kcal, target_proteine_g, target_carboidrati_g, "
     "target_grassi_g, target_sonno_minuti. Per i target e l'altezza, 0 vuol "
-    "dire 'non impostato'.",
+    "dire 'non impostato'. target_tolleranza_pct (0-50) allarga tutti i target "
+    "in un intervallo: 10 su un obiettivo di 2300 kcal vuol dire 2070-2530.",
     {
         "type": "object",
         "properties": {
@@ -1253,6 +1254,7 @@ def aggiungi_nota_dolore(zona_corporea, descrizione="", gravita=1, data=None,
                     "target_carboidrati_g",
                     "target_grassi_g",
                     "target_sonno_minuti",
+                    "target_tolleranza_pct",
                 ],
             },
             "valore": {"type": "integer"},
@@ -1273,6 +1275,9 @@ def imposta_preferenza(chiave, valore):
         "target_carboidrati_g": (0, 1000),
         "target_grassi_g": (0, 1000),
         "target_sonno_minuti": (0, 900),
+        # Zero qui non vuol dire "non impostato" ma "nessuna tolleranza": il
+        # range collassa sul valore secco, che e' il comportamento di prima.
+        "target_tolleranza_pct": (0, 50),
     }
     if chiave not in limiti:
         raise ErroreStrumento("Preferenza sconosciuta.")

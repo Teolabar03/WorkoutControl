@@ -143,13 +143,42 @@ def _giorno(nome, default):
         raise ApiError("VALIDATION_ERROR", f"{nome} deve essere in formato AAAA-MM-GG.", 422)
 
 
-@bp.get("/salute")
-def elenco_salute_route():
+def _periodo():
+    """L'intervallo chiesto dalla query string, validato. Torna (al, dal)."""
     al = _giorno("al", date.today())
     dal = _giorno("dal", al - timedelta(days=GIORNI_DEFAULT - 1))
     if dal > al:
         raise ApiError("VALIDATION_ERROR", "L'intervallo di date e' rovesciato.", 422)
+    return al, dal
+
+
+@bp.get("/salute")
+def elenco_salute_route():
+    al, dal = _periodo()
     return api_ok(salute.giorni_salute(dal, al))
+
+
+@bp.get("/salute/metriche")
+def metriche_salute_route():
+    """Le metriche generiche arrivate dal telefono, solo quelle con dei valori.
+
+    L'elenco non e' fisso: dipende da cosa Health Connect sta effettivamente
+    riversando. Il frontend ci costruisce sopra una card per voce senza sapere
+    in anticipo quali siano, cosi' un tipo nuovo compare da solo.
+    """
+    al, dal = _periodo()
+    return api_ok(salute.metriche_disponibili(dal, al))
+
+
+@bp.get("/nutrizione/pasti")
+def elenco_pasti_route():
+    """I singoli pasti del periodo, per il riepilogo della sezione Nutrizione.
+
+    Gli aggregati giornalieri stanno in `GET /salute`: qui c'e' il dettaglio,
+    che e' l'unico posto da cui si vedono fibre e zuccheri.
+    """
+    al, dal = _periodo()
+    return api_ok(salute.pasti_periodo(dal, al))
 
 
 @bp.get("/salute/stato")

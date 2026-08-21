@@ -2,6 +2,7 @@ import {
   Bar,
   BarChart,
   Cell,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -16,6 +17,8 @@ export function BarTrendChart({
   unita,
   coloreBarra,
   target,
+  targetMin,
+  targetMax,
 }: {
   labels: string[]
   valori: number[]
@@ -24,8 +27,15 @@ export function BarTrendChart({
   coloreBarra?: (valore: number) => string
   /** Obiettivo giornaliero da tracciare come linea; assente o 0 = non impostato. */
   target?: number
+  /** Estremi della fascia "in linea" attorno al target. Passandoli, l'obiettivo
+   *  si disegna come banda invece che come linea sola: è la stessa tolleranza
+   *  che governa le barre in Nutrizione, e i due devono raccontare la stessa
+   *  cosa. Senza, il componente si comporta esattamente come prima. */
+  targetMin?: number
+  targetMax?: number
 }) {
   const dati = labels.map((label, i) => ({ label, valore: valori[i] }))
+  const conFascia = !!targetMin && !!targetMax && targetMax > targetMin
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -47,6 +57,15 @@ export function BarTrendChart({
           content={<ChartTooltip unita={unita} />}
           cursor={{ fill: "var(--color-muted)", opacity: 0.4 }}
         />
+        {conFascia && (
+          <ReferenceArea
+            y1={targetMin}
+            y2={targetMax}
+            fill="var(--color-accent)"
+            fillOpacity={0.12}
+            stroke="none"
+          />
+        )}
         {!!target && (
           <ReferenceLine
             y={target}
@@ -55,7 +74,9 @@ export function BarTrendChart({
             label={{
               value: `obiettivo ${target}`,
               position: "insideTopRight",
-              fill: "var(--color-accent)",
+              // Sopra la fascia il verde su verde non si legge: lì l'etichetta
+              // passa al colore del testo, e a dire "obiettivo" resta la banda.
+              fill: conFascia ? "var(--color-foreground)" : "var(--color-accent)",
               fontSize: 11,
             }}
           />

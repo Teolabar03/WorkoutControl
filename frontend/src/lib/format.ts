@@ -26,3 +26,23 @@ export function tempoMmss(secondiTotali: number): string {
   const s = secondiTotali % 60
   return `${m}:${String(s).padStart(2, "0")}`
 }
+
+/** "21/08": l'asse di un grafico non ha spazio per l'anno. */
+export function etichettaBreve(iso: string): string {
+  return dataIt(iso).slice(0, 5)
+}
+
+/** Media aritmetica, null su lista vuota.
+ *
+ *  null e non 0: "nessun dato" e "media zero" sono cose diverse, e chi chiama
+ *  mostra un trattino nel primo caso. */
+export function media(valori: number[]): number | null {
+  if (valori.length === 0) return null
+  return valori.reduce((somma, v) => somma + v, 0) / valori.length
+}
+
+/** L'orario di un timestamp ISO, "13:45". */
+export function oraIt(iso: string | null | undefined): string {
+  if (!iso) return ""
+  return iso.slice(11, 16)
+}

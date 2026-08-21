@@ -3,25 +3,16 @@ import { Navigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ChartCard } from "@/components/statistiche/ChartCard"
 import { BarTrendChart } from "@/components/statistiche/BarTrendChart"
-import { LineTrendChart } from "@/components/statistiche/LineTrendChart"
 import { MetricTile } from "@/components/statistiche/MetricTile"
-import { dataIt, numeroIt } from "@/lib/format"
+import { CardMetricaSalute } from "@/components/salute/CardMetricaSalute"
+import { dataIt, etichettaBreve, media } from "@/lib/format"
+import { rangeObiettivo } from "@/lib/obiettivi"
 import { useAppContext } from "@/hooks/useAppContext"
 import { useImpostazioni } from "@/hooks/useImpostazioni"
-import { useSalute } from "@/hooks/useSalute"
+import { useMetricheSalute, useSalute } from "@/hooks/useSalute"
 import type { GiornoSalute } from "@/api/salute"
 
 const PERIODI = [30, 90]
-
-/** "21/08" — sull'asse ci sta solo giorno e mese. */
-function etichettaBreve(iso: string) {
-  return dataIt(iso).slice(0, 5)
-}
-
-function media(valori: number[]) {
-  if (valori.length === 0) return null
-  return valori.reduce((somma, v) => somma + v, 0) / valori.length
-}
 
 function oreEMinuti(minuti: number) {
   return `${Math.floor(minuti / 60)}h ${String(Math.round(minuti % 60)).padStart(2, "0")}`
@@ -32,6 +23,7 @@ export function SalutePage() {
   const { data: impostazioni } = useImpostazioni()
   const [giorni, setGiorni] = useState(PERIODI[0])
   const { data: righe } = useSalute(giorni)
+  const { data: metriche } = useMetricheSalute(giorni)
 
   // La sezione esiste solo con la sincronizzazione attiva: chi arriva qui con
   // l'URL a mano (o dopo aver svuotato i dati) torna da dove è venuto invece
@@ -43,13 +35,17 @@ export function SalutePage() {
   // da sinistra a destra.
   const cronologiche: GiornoSalute[] = [...(righe ?? [])].reverse()
   const conSonno = cronologiche.filter((g) => g.sonno_minuti > 0)
-  const conPeso = cronologiche.filter((g) => g.peso_kg !== null)
 
   const mediaSonno = media(conSonno.map((g) => g.sonno_minuti))
   const ultimaNotte = conSonno.at(-1)
-  const targetSonnoOre = impostazioni?.target_sonno_minuti
-    ? Number((impostazioni.target_sonno_minuti / 60).toFixed(1))
-    : undefined
+  // Il peso non sta qui: ha una sezione sua, con altezza, BMI e storico
+  // modificabile. Ripeterlo voleva dire due grafici della stessa cosa, da due
+  // fonti diverse.
+  const inOre = (minuti: number) => Number((minuti / 60).toFixed(1))
+  const rangeSonno = rangeObiettivo(
+    impostazioni?.target_sonno_minuti ?? 0,
+    impostazioni?.target_tolleranza_pct ?? 0
+  )
 
   return (
     <div className="space-y-6">
@@ -69,7 +65,7 @@ export function SalutePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <MetricTile
           etichetta="Sonno medio"
           valore={mediaSonno === null ? "—" : oreEMinuti(mediaSonno)}
@@ -85,30 +81,26 @@ export function SalutePage() {
           valore={conSonno.length ? oreEMinuti(Math.max(...conSonno.map((g) => g.sonno_minuti))) : "—"}
           nota={`ultimi ${giorni} giorni`}
         />
-        <MetricTile
-          etichetta="Ultimo peso"
-          valore={conPeso.length ? `${numeroIt(conPeso.at(-1)!.peso_kg!)} kg` : "—"}
-          nota={conPeso.length ? dataIt(conPeso.at(-1)!.data) : undefined}
-        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <ChartCard titolo="Ore di sonno" vuoto={conSonno.length === 0}>
           <BarTrendChart
             labels={conSonno.map((g) => etichettaBreve(g.data))}
-            valori={conSonno.map((g) => Number((g.sonno_minuti / 60).toFixed(1)))}
+            valori={conSonno.map((g) => inOre(g.sonno_minuti))}
             unita="ore"
-            target={targetSonnoOre}
+            target={rangeSonno ? inOre(rangeSonno.target) : undefined}
+            targetMin={rangeSonno ? inOre(rangeSonno.min) : undefined}
+            targetMax={rangeSonno ? inOre(rangeSonno.max) : undefined}
           />
         </ChartCard>
 
-        <ChartCard titolo="Peso corporeo" vuoto={conPeso.length === 0}>
-          <LineTrendChart
-            labels={conPeso.map((g) => g.data)}
-            valori={conPeso.map((g) => g.peso_kg as number)}
-            unita="kg"
-          />
-        </ChartCard>
+        {/* Le metriche generiche: l'elenco arriva dal server e contiene solo
+            quelle che hanno davvero dei valori, quindi qui non c'è niente da
+            decidere — si disegna quello che c'è. */}
+        {(metriche ?? []).map((m) => (
+          <CardMetricaSalute key={m.tipo} metrica={m} />
+        ))}
       </div>
 
       {ultimaNotte && Object.keys(ultimaNotte.fasi).length > 0 && (

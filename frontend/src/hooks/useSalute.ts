@@ -19,6 +19,24 @@ export function useSalute(giorni: number) {
   })
 }
 
+/** Le metriche generiche del periodo. L'array è già filtrato dal server: ci
+ *  sono solo i tipi che hanno davvero dei valori. */
+export function useMetricheSalute(giorni: number) {
+  const { dal, al } = intervallo(giorni)
+  return useQuery({
+    queryKey: ["salute", "metriche", dal, al],
+    queryFn: () => saluteApi.metriche(dal, al),
+  })
+}
+
+export function usePasti(giorni: number) {
+  const { dal, al } = intervallo(giorni)
+  return useQuery({
+    queryKey: ["salute", "pasti", dal, al],
+    queryFn: () => saluteApi.pasti(dal, al),
+  })
+}
+
 export function useStatoSalute() {
   return useQuery({ queryKey: ["salute", "stato"], queryFn: saluteApi.stato })
 }

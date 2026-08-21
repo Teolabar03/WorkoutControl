@@ -11,6 +11,10 @@ export interface Impostazioni {
   target_carboidrati_g: number
   target_grassi_g: number
   target_sonno_minuti: number
+  /** Di quanto si può sbagliare un obiettivo restando "in linea", in percento.
+   *  Trasforma i target secchi in intervalli: 10 su 2300 kcal = 2070–2530.
+   *  Qui 0 non vuol dire "non impostata" ma "nessuna tolleranza". */
+  target_tolleranza_pct: number
   attrezzatura_disponibile: string
 }
 

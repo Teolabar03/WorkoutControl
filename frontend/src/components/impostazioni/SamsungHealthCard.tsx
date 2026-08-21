@@ -111,17 +111,36 @@ export function SamsungHealthCard() {
       </div>
 
       {stato.collegata && (
-        <div className="grid grid-cols-3 gap-2 border-t border-border pt-4 text-sm">
-          {[
-            { etichetta: "Sonno", valore: stato.ultimo_sonno },
-            { etichetta: "Pasti", valore: stato.ultimo_pasto },
-            { etichetta: "Peso", valore: stato.ultimo_peso },
-          ].map((voce) => (
-            <div key={voce.etichetta} className="rounded-md border border-border p-2">
-              <p className="text-xs text-muted-foreground">{voce.etichetta}</p>
-              <p className="tabular-nums">{voce.valore ? dataIt(voce.valore) : "—"}</p>
+        <div className="space-y-2 border-t border-border pt-4 text-sm">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { etichetta: "Sonno", valore: stato.ultimo_sonno },
+              { etichetta: "Pasti", valore: stato.ultimo_pasto },
+              { etichetta: "Peso", valore: stato.ultimo_peso },
+            ].map((voce) => (
+              <div key={voce.etichetta} className="rounded-md border border-border p-2">
+                <p className="text-xs text-muted-foreground">{voce.etichetta}</p>
+                <p className="tabular-nums">{voce.valore ? dataIt(voce.valore) : "—"}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Gli altri tipi di dato non sono un elenco fisso: dipendono dai
+              permessi che l'app ponte ha ottenuto e da cosa Samsung Health
+              riversa sull'hub. Mostrare quello che arriva davvero è l'unico
+              modo per accorgersi che manca qualcosa. */}
+          {stato.metriche.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {stato.metriche.map((m) => (
+                <div key={m.tipo} className="rounded-md border border-border p-2">
+                  <p className="text-xs text-muted-foreground">{m.etichetta}</p>
+                  <p className="tabular-nums">
+                    {m.ultima_data ? dataIt(m.ultima_data) : "—"}
+                  </p>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
