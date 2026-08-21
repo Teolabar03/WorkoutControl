@@ -19,9 +19,15 @@ type ErrorEnvelope = { error: { code: string; message: string; fields?: unknown 
 const API_BASE = `${import.meta.env.BASE_URL}api`
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Con FormData il Content-Type lo deve scrivere il browser: include il
+  // boundary del multipart, che noi non possiamo conoscere.
+  const multipart = init?.body instanceof FormData
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      ...(multipart ? {} : { "Content-Type": "application/json" }),
+      ...init?.headers,
+    },
   })
 
   if (res.status === 401 && !path.startsWith("/auth/")) {
@@ -61,4 +67,5 @@ export const api = {
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form }),
 }
