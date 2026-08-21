@@ -134,17 +134,33 @@ def registra_sonno(
 
 
 def registra_pasto(inizio, nome="", origine=ORIGINE_SAMSUNG, **valori):
-    """Salva (o aggiorna) un pasto. Chiave: orario di inizio piu' nome."""
+    """Salva (o aggiorna) un pasto.
+
+    Un pasto con un nome ("Colazione", "Pranzo") e' unico nella sua giornata, e
+    la chiave e' quella: giorno piu' nome. Non l'orario, perche' le due fonti lo
+    danno diverso — il telefono manda l'ora del pasto, l'export quella in cui e'
+    stato registrato — e a chiave sull'orario la stessa colazione entrerebbe due
+    volte, raddoppiando le calorie del giorno. Per i pasti senza nome quella
+    chiave collasserebbe tutto in un record solo, quindi li' resta l'orario.
+    """
     if inizio is None:
         return None
     nome = (nome or "").strip()[:160]
 
-    pasto = (
-        db.session.query(PastoNutrizione).filter_by(inizio=inizio, nome=nome).first()
-    )
+    if nome:
+        pasto = (
+            db.session.query(PastoNutrizione)
+            .filter_by(data=inizio.date(), nome=nome)
+            .first()
+        )
+    else:
+        pasto = (
+            db.session.query(PastoNutrizione).filter_by(inizio=inizio, nome=nome).first()
+        )
     if pasto is None:
         pasto = PastoNutrizione(inizio=inizio, nome=nome)
         db.session.add(pasto)
+    pasto.inizio = inizio
     pasto.data = inizio.date()
     for campo in (
         "kcal",

@@ -9,3 +9,7 @@ __pycache__/
 .venv/
 venv/
 old
+
+# Export personale di Samsung Health: dati sanitari, non vanno su GitHub.
+samsunghealth_*.zip
+samsunghealth_*/

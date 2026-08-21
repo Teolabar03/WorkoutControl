@@ -26,8 +26,21 @@ export interface StatoSalute {
   ultimo_peso: string | null
 }
 
+/** Quanto ha importato l'export: `altezza_cm` solo se l'ha dedotta lui. */
+export interface EsitoImport {
+  sonno: number
+  pasti: number
+  peso: number
+  altezza_cm?: number
+}
+
 export const saluteApi = {
   giorni: (dal: string, al: string) =>
     api.get<GiornoSalute[]>(`/salute?dal=${dal}&al=${al}`),
   stato: () => api.get<StatoSalute>("/salute/stato"),
+  importa: (file: File) => {
+    const form = new FormData()
+    form.append("file", file)
+    return api.upload<EsitoImport>("/salute/import", form)
+  },
 }

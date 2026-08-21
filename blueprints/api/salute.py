@@ -16,6 +16,7 @@ from flask import Blueprint, current_app, request
 
 from schemas import ApiError, api_ok
 from services import salute
+from services.samsung_export import ErroreImport, importa_export
 
 bp = Blueprint("api_salute", __name__, url_prefix="/api")
 
@@ -25,6 +26,10 @@ MAX_PAYLOAD_BYTE = 2 * 1024 * 1024
 
 # Quanti giorni mostra la pagina Salute se non viene chiesto un periodo.
 GIORNI_DEFAULT = 30
+
+# L'export completo di Samsung Health puo' pesare parecchio: si leggono solo i
+# quattro CSV che servono, ma il file va comunque caricato per intero.
+MAX_EXPORT_BYTE = 300 * 1024 * 1024
 
 
 def _token_configurato():
@@ -46,16 +51,67 @@ def ingest_route():
             503,
         )
 
-    intestazione = request.headers.get("Authorization", "")
-    fornito = intestazione[7:].strip() if intestazione.startswith("Bearer ") else ""
-    if not secrets.compare_digest(fornito, atteso):
-        raise ApiError("UNAUTHORIZED", "Token di sincronizzazione non valido.", 401)
+    if not _token_valido(atteso):
+        # Il rifiuto va spiegato: dall'altra parte c'e' un'app di terze parti
+        # configurata a mano, e "401" da solo non dice se l'header manca o se il
+        # token e' sbagliato. Si annotano i NOMI degli header, mai i valori.
+        current_app.logger.warning(
+            "Ingest rifiutato da %s: header presenti = %s",
+            request.remote_addr,
+            sorted(request.headers.keys()),
+        )
+        raise ApiError(
+            "UNAUTHORIZED",
+            "Token di sincronizzazione mancante o errato. Attesi: header "
+            "'Authorization: Bearer <token>' oppure 'X-Ingest-Token: <token>'.",
+            401,
+        )
 
     if (request.content_length or 0) > MAX_PAYLOAD_BYTE:
         raise ApiError("PAYLOAD_TROPPO_GRANDE", "Payload troppo grande.", 413)
 
     payload = request.get_json(force=True, silent=True) or {}
     return api_ok(salute.ingerisci_health_connect(payload))
+
+
+def _token_valido(atteso):
+    """Il token, accettato in tutte le forme che le app di webhook producono.
+
+    HC Webhook fa scrivere nome e valore dell'header in due campi separati, e
+    il prefisso "Bearer " finisce facilmente perso o duplicato: accettare le
+    varianti costa nulla e toglie di mezzo un'intera classe di errori di
+    configurazione, senza indebolire niente — il segreto resta lo stesso.
+    """
+    candidati = []
+    intestazione = (request.headers.get("Authorization") or "").strip()
+    if intestazione:
+        prefisso, _, resto = intestazione.partition(" ")
+        candidati.append(resto.strip() if prefisso.lower() == "bearer" else intestazione)
+    for nome in ("X-Ingest-Token", "X-Auth-Token"):
+        valore = (request.headers.get(nome) or "").strip()
+        if valore:
+            candidati.append(valore)
+    return any(secrets.compare_digest(c, atteso) for c in candidati)
+
+
+@bp.post("/salute/import")
+def import_export_route():
+    """Carica lo storico dall'export "Scarica dati personali" di Samsung Health.
+
+    Sta dietro al login, al contrario dell'ingest: questa la chiama l'utente dal
+    browser, non il telefono.
+    """
+    caricato = request.files.get("file")
+    if caricato is None or not caricato.filename:
+        raise ApiError("VALIDATION_ERROR", "Nessun file caricato.", 422)
+    if (request.content_length or 0) > MAX_EXPORT_BYTE:
+        raise ApiError("PAYLOAD_TROPPO_GRANDE", "File troppo grande.", 413)
+
+    try:
+        conteggi = importa_export(caricato.stream, caricato.filename)
+    except ErroreImport as exc:
+        raise ApiError("VALIDATION_ERROR", str(exc), 422)
+    return api_ok(conteggi)
 
 
 def _giorno(nome, default):

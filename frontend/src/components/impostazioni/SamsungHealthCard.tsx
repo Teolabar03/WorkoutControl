@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react"
-import { Copy } from "lucide-react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
+import { Copy, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { dataIt } from "@/lib/format"
 import { useImpostazioni, useModificaImpostazioni } from "@/hooks/useImpostazioni"
-import { useStatoSalute } from "@/hooks/useSalute"
+import { useImportaExport, useStatoSalute } from "@/hooks/useSalute"
 
 /** I target giornalieri: stesse chiavi lato API, etichette per l'interfaccia. */
 const TARGET = [
@@ -30,6 +30,8 @@ export function SamsungHealthCard() {
   const { data: stato } = useStatoSalute()
   const { data: impostazioni } = useImpostazioni()
   const modifica = useModificaImpostazioni()
+  const importa = useImportaExport()
+  const selettoreFile = useRef<HTMLInputElement>(null)
   const [valori, setValori] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -108,6 +110,37 @@ export function SamsungHealthCard() {
           con il token del server.
         </li>
       </ol>
+
+      <div className="space-y-2 border-t border-border pt-4">
+        <h3 className="font-medium">Storico dal file di export</h3>
+        <p className="text-sm text-muted-foreground">
+          La sincronizzazione copre solo le ultime 48 ore: il passato arriva da qui. In Samsung Health,
+          "Il mio profilo → Impostazioni → Scarica dati personali", poi carica lo ZIP. Si importano sonno,
+          peso e alimentazione; reimportare lo stesso file non duplica niente.
+        </p>
+        <input
+          ref={selettoreFile}
+          type="file"
+          accept=".zip,.csv"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) importa.mutate(file)
+            // Azzerato subito: senza, ricaricare lo stesso file non scatenerebbe
+            // un nuovo evento change e il pulsante sembrerebbe rotto.
+            e.target.value = ""
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => selettoreFile.current?.click()}
+          disabled={importa.isPending}
+        >
+          <Upload className="size-4" />
+          {importa.isPending ? "Importazione in corso…" : "Carica export Samsung Health"}
+        </Button>
+      </div>
 
       {stato.collegata && (
         <>
