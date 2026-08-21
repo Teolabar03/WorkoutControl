@@ -9,6 +9,9 @@ export interface AppContext {
   /** Vero solo dopo il primo dato arrivato dal telefono: finché è falso la
    *  sezione Salute non compare da nessuna parte. */
   salute_collegata: boolean
+  /** Condizione a parte per la sezione Nutrizione: i pasti spesso arrivano solo
+   *  dall'export, quindi si puo' avere il sonno senza avere l'alimentazione. */
+  nutrizione_disponibile: boolean
 }
 
 export function useAppContext() {

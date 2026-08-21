@@ -27,5 +27,6 @@ def context_route():
             # Salute non esiste per l'app: stessa logica di ai_disponibile,
             # che fa sparire l'assistente quando non c'e' un provider.
             "salute_collegata": salute.ci_sono_dati(),
+            "nutrizione_disponibile": salute.ci_sono_pasti(),
         }
     )

@@ -61,7 +61,7 @@ export function PesoPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-heading text-2xl font-semibold">Peso corporeo</h1>
+      <h1 className="font-heading text-2xl font-semibold">Peso e altezza</h1>
 
       <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 sm:items-end">
         <form

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useRef } from "react"
 import { Copy, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -6,19 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { dataIt } from "@/lib/format"
-import { useImpostazioni, useModificaImpostazioni } from "@/hooks/useImpostazioni"
 import { useImportaExport, useStatoSalute } from "@/hooks/useSalute"
-
-/** I target giornalieri: stesse chiavi lato API, etichette per l'interfaccia. */
-const TARGET = [
-  { chiave: "target_kcal", etichetta: "Calorie (kcal)" },
-  { chiave: "target_proteine_g", etichetta: "Proteine (g)" },
-  { chiave: "target_carboidrati_g", etichetta: "Carboidrati (g)" },
-  { chiave: "target_grassi_g", etichetta: "Grassi (g)" },
-  { chiave: "target_sonno_minuti", etichetta: "Sonno (minuti)" },
-] as const
-
-type ChiaveTarget = (typeof TARGET)[number]["chiave"]
 
 /** Pannello di collegamento a Samsung Health, sempre presente in Impostazioni.
  *
@@ -28,28 +16,8 @@ type ChiaveTarget = (typeof TARGET)[number]["chiave"]
  */
 export function SamsungHealthCard() {
   const { data: stato } = useStatoSalute()
-  const { data: impostazioni } = useImpostazioni()
-  const modifica = useModificaImpostazioni()
   const importa = useImportaExport()
   const selettoreFile = useRef<HTMLInputElement>(null)
-  const [valori, setValori] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (!impostazioni) return
-    // Zero vuol dire "nessun obiettivo": il campo resta vuoto, non a "0".
-    setValori(
-      Object.fromEntries(
-        TARGET.map(({ chiave }) => [chiave, impostazioni[chiave] ? String(impostazioni[chiave]) : ""])
-      )
-    )
-  }, [impostazioni])
-
-  function salvaTarget(e: FormEvent) {
-    e.preventDefault()
-    const dati: Partial<Record<ChiaveTarget, number>> = {}
-    for (const { chiave } of TARGET) dati[chiave] = Math.round(Number(valori[chiave] || 0))
-    modifica.mutate(dati)
-  }
 
   async function copiaUrl() {
     if (!stato) return
@@ -143,46 +111,18 @@ export function SamsungHealthCard() {
       </div>
 
       {stato.collegata && (
-        <>
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            {[
-              { etichetta: "Sonno", valore: stato.ultimo_sonno },
-              { etichetta: "Pasti", valore: stato.ultimo_pasto },
-              { etichetta: "Peso", valore: stato.ultimo_peso },
-            ].map((voce) => (
-              <div key={voce.etichetta} className="rounded-md border border-border p-2">
-                <p className="text-xs text-muted-foreground">{voce.etichetta}</p>
-                <p className="tabular-nums">{voce.valore ? dataIt(voce.valore) : "—"}</p>
-              </div>
-            ))}
-          </div>
-
-          <form onSubmit={salvaTarget} className="space-y-3 border-t border-border pt-4">
-            <div>
-              <h3 className="font-medium">Obiettivi giornalieri</h3>
-              <p className="text-sm text-muted-foreground">
-                Disegnati come linea di riferimento nei grafici della sezione Salute. Lascia vuoto quelli
-                che non ti interessano.
-              </p>
+        <div className="grid grid-cols-3 gap-2 border-t border-border pt-4 text-sm">
+          {[
+            { etichetta: "Sonno", valore: stato.ultimo_sonno },
+            { etichetta: "Pasti", valore: stato.ultimo_pasto },
+            { etichetta: "Peso", valore: stato.ultimo_peso },
+          ].map((voce) => (
+            <div key={voce.etichetta} className="rounded-md border border-border p-2">
+              <p className="text-xs text-muted-foreground">{voce.etichetta}</p>
+              <p className="tabular-nums">{voce.valore ? dataIt(voce.valore) : "—"}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {TARGET.map(({ chiave, etichetta }) => (
-                <div key={chiave} className="space-y-1.5">
-                  <Label htmlFor={`target-${chiave}`}>{etichetta}</Label>
-                  <Input
-                    id={`target-${chiave}`}
-                    inputMode="numeric"
-                    value={valori[chiave] ?? ""}
-                    onChange={(e) => setValori((v) => ({ ...v, [chiave]: e.target.value }))}
-                  />
-                </div>
-              ))}
-            </div>
-            <Button type="submit" disabled={modifica.isPending}>
-              Salva obiettivi
-            </Button>
-          </form>
-        </>
+          ))}
+        </div>
       )}
     </div>
   )
