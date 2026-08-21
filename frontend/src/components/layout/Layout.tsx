@@ -8,7 +8,10 @@ export function Layout() {
 
   return (
     <div className="min-h-svh bg-background">
-      <TopBar aiDisponibile={context?.ai_disponibile ?? false} />
+      <TopBar
+        aiDisponibile={context?.ai_disponibile ?? false}
+        saluteCollegata={context?.salute_collegata ?? false}
+      />
       <SessioneBanner sessione={context?.sessione_corrente ?? null} />
       <main className="mx-auto max-w-5xl px-3 py-4 sm:px-6 sm:py-6">
         <Outlet />

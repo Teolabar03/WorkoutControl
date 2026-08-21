@@ -1,5 +1,5 @@
 """API REST per le preferenze dell'app (timer di default, contesto AI,
-attrezzatura disponibile).
+attrezzatura disponibile, altezza e target giornalieri).
 
 La scelta del modello AI/Ollama vive invece in `blueprints/api/chat.py`: è
 strettamente legata al catalogo provider (`services/ai.py`), non una
@@ -18,13 +18,28 @@ from services.ai_tools import (
 
 bp = Blueprint("api_impostazioni", __name__, url_prefix="/api")
 
+# Preferenze numeriche gestite tutte allo stesso modo: il controllo dei limiti
+# sta in `imposta_preferenza`, che è anche lo strumento usato dall'assistente.
+# L'altezza serve al BMI nella pagina del peso e vale sempre; i target
+# giornalieri disegnano le linee di riferimento nella sezione Salute.
+CHIAVI_NUMERICHE = (
+    "timer_default_sec",
+    "analisi_n_sessioni",
+    "altezza_cm",
+    "target_kcal",
+    "target_proteine_g",
+    "target_carboidrati_g",
+    "target_grassi_g",
+    "target_sonno_minuti",
+)
+
 
 def _dati():
-    return {
-        "timer_default_sec": Impostazione.get_int("timer_default_sec", 90),
-        "analisi_n_sessioni": Impostazione.get_int("analisi_n_sessioni", 10),
-        "attrezzatura_disponibile": Impostazione.get("attrezzatura_disponibile") or "",
-    }
+    dati = {chiave: Impostazione.get_int(chiave, 0) for chiave in CHIAVI_NUMERICHE}
+    dati["attrezzatura_disponibile"] = (
+        Impostazione.get("attrezzatura_disponibile") or ""
+    )
+    return dati
 
 
 @bp.get("/impostazioni")
@@ -36,10 +51,9 @@ def leggi_impostazioni_route():
 def modifica_impostazioni_route():
     corpo = request.get_json(force=True, silent=True) or {}
     try:
-        if "timer_default_sec" in corpo:
-            imposta_preferenza("timer_default_sec", corpo["timer_default_sec"])
-        if "analisi_n_sessioni" in corpo:
-            imposta_preferenza("analisi_n_sessioni", corpo["analisi_n_sessioni"])
+        for chiave in CHIAVI_NUMERICHE:
+            if chiave in corpo:
+                imposta_preferenza(chiave, corpo[chiave])
         if "attrezzatura_disponibile" in corpo:
             imposta_attrezzatura(corpo["attrezzatura_disponibile"])
     except ErroreStrumento as exc:

@@ -16,6 +16,7 @@ import {
 import { useCambiaModello, useModelliAi, useAvviaOllama, useStatoOllama } from "@/hooks/useChat"
 import { useCambiaModelloOllama, useImpostazioni, useModificaImpostazioni } from "@/hooks/useImpostazioni"
 import { useAppContext } from "@/hooks/useAppContext"
+import { SamsungHealthCard } from "@/components/impostazioni/SamsungHealthCard"
 
 export function ImpostazioniPage() {
   const { data: context } = useAppContext()
@@ -83,6 +84,8 @@ export function ImpostazioniPage() {
           Salva
         </Button>
       </form>
+
+      <SamsungHealthCard />
 
       {context?.ai_disponibile && catalogo && (
         <div className="space-y-4 rounded-lg border border-border bg-card p-4">

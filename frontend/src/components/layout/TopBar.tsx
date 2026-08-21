@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ClipboardList,
   Dumbbell,
+  HeartPulse,
   LogOut,
   Menu,
   NotebookPen,
@@ -23,7 +24,7 @@ interface NavItem {
   icon: typeof CalendarDays
 }
 
-function navItems(aiDisponibile: boolean): NavItem[] {
+function navItems(aiDisponibile: boolean, saluteCollegata: boolean): NavItem[] {
   const base: NavItem[] = [
     { to: "/calendario", label: "Calendario", icon: CalendarDays },
     { to: "/schede", label: "Schede", icon: ClipboardList },
@@ -34,13 +35,22 @@ function navItems(aiDisponibile: boolean): NavItem[] {
     { to: "/peso", label: "Peso", icon: Scale },
     { to: "/diario", label: "Diario", icon: NotebookPen }
   )
+  // Come per l'assistente AI: la voce compare solo quando c'è qualcosa da
+  // vederci dentro, cioè dopo il primo dato ricevuto da Samsung Health.
+  if (saluteCollegata) base.push({ to: "/salute", label: "Salute", icon: HeartPulse })
   return base
 }
 
-export function TopBar({ aiDisponibile }: { aiDisponibile: boolean }) {
+export function TopBar({
+  aiDisponibile,
+  saluteCollegata,
+}: {
+  aiDisponibile: boolean
+  saluteCollegata: boolean
+}) {
   const logout = useLogout()
   const [menuAperto, setMenuAperto] = useState(false)
-  const items = navItems(aiDisponibile)
+  const items = navItems(aiDisponibile, saluteCollegata)
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">

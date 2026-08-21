@@ -16,6 +16,7 @@ def register_all(app):
         diario,
         impostazioni,
         peso,
+        salute,
         schede,
         sessione,
         statistiche,
@@ -25,6 +26,7 @@ def register_all(app):
     app.register_blueprint(schede.bp)
     app.register_blueprint(calendario.bp)
     app.register_blueprint(peso.bp)
+    app.register_blueprint(salute.bp)
     app.register_blueprint(diario.bp)
     app.register_blueprint(statistiche.bp)
     app.register_blueprint(statistiche.bp_pr)

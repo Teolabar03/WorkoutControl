@@ -396,6 +396,74 @@ def storico_peso_corporeo(limite=30):
 
 
 @strumento(
+    "storico_sonno",
+    "Le notti registrate da Samsung Health, dalla piu' recente. Vuoto se la "
+    "sincronizzazione col telefono non e' attiva.",
+    {"type": "object", "properties": {"limite": {"type": "integer"}}},
+)
+def storico_sonno(limite=30):
+    # Import qui dentro e non in cima: services.salute importa questo modulo
+    # per riusare registra_peso_corporeo, e in cima sarebbe un ciclo.
+    from models import SonnoNotte
+
+    notti = (
+        db.session.query(SonnoNotte)
+        .order_by(SonnoNotte.data.desc())
+        .limit(max(1, min(int(limite or 30), 365)))
+        .all()
+    )
+    return {
+        "notti": [
+            {
+                "data": n.data.isoformat(),
+                "ore": n.ore,
+                "dalle": n.inizio.strftime("%H:%M"),
+                "alle": n.fine.strftime("%H:%M"),
+                "fasi_minuti": {
+                    etichetta: valore
+                    for etichetta, valore in (
+                        ("profondo", n.minuti_profondo),
+                        ("rem", n.minuti_rem),
+                        ("leggero", n.minuti_leggero),
+                        ("sveglio", n.minuti_sveglio),
+                    )
+                    if valore
+                },
+            }
+            for n in notti
+        ]
+    }
+
+
+@strumento(
+    "storico_alimentazione",
+    "Calorie e macronutrienti per giorno da Samsung Health, dal piu' recente. "
+    "Vuoto se la sincronizzazione col telefono non e' attiva.",
+    {"type": "object", "properties": {"giorni": {"type": "integer"}}},
+)
+def storico_alimentazione(giorni=30):
+    from datetime import timedelta
+
+    from services.salute import giorni_salute
+
+    al = date.today()
+    dal = al - timedelta(days=max(1, min(int(giorni or 30), 365)) - 1)
+    return {
+        "giorni": [
+            {
+                "data": r["data"],
+                "kcal": r["kcal"],
+                "proteine_g": r["proteine_g"],
+                "carboidrati_g": r["carboidrati_g"],
+                "grassi_g": r["grassi_g"],
+            }
+            for r in giorni_salute(dal, al)
+            if r["kcal"] is not None
+        ]
+    }
+
+
+@strumento(
     "storico_dolori",
     "Le note del diario dolori/recupero, dalla piu' recente.",
     {"type": "object", "properties": {"limite": {"type": "integer"}}},
@@ -1165,15 +1233,27 @@ def aggiungi_nota_dolore(zona_corporea, descrizione="", gravita=1, data=None,
 
 @strumento(
     "imposta_preferenza",
-    "Cambia una preferenza dell'app: timer_default_sec (recupero di default, "
-    "5-900 secondi) o analisi_n_sessioni (quanti allenamenti recenti tenere nel "
-    "contesto dell'assistente, 1-100).",
+    "Cambia una preferenza numerica dell'app: timer_default_sec (recupero di "
+    "default, 5-900 secondi), analisi_n_sessioni (quanti allenamenti recenti "
+    "tenere nel contesto dell'assistente, 1-100), altezza_cm (serve al BMI) e i "
+    "target giornalieri target_kcal, target_proteine_g, target_carboidrati_g, "
+    "target_grassi_g, target_sonno_minuti. Per i target e l'altezza, 0 vuol "
+    "dire 'non impostato'.",
     {
         "type": "object",
         "properties": {
             "chiave": {
                 "type": "string",
-                "enum": ["timer_default_sec", "analisi_n_sessioni"],
+                "enum": [
+                    "timer_default_sec",
+                    "analisi_n_sessioni",
+                    "altezza_cm",
+                    "target_kcal",
+                    "target_proteine_g",
+                    "target_carboidrati_g",
+                    "target_grassi_g",
+                    "target_sonno_minuti",
+                ],
             },
             "valore": {"type": "integer"},
         },
@@ -1182,7 +1262,18 @@ def aggiungi_nota_dolore(zona_corporea, descrizione="", gravita=1, data=None,
     scrive=True,
 )
 def imposta_preferenza(chiave, valore):
-    limiti = {"timer_default_sec": (5, 900), "analisi_n_sessioni": (1, 100)}
+    # Lo zero e' ammesso dove significa "non impostato": senza altezza non si
+    # mostra il BMI, senza target non si disegna la linea di riferimento.
+    limiti = {
+        "timer_default_sec": (5, 900),
+        "analisi_n_sessioni": (1, 100),
+        "altezza_cm": (0, 250),
+        "target_kcal": (0, 10000),
+        "target_proteine_g": (0, 1000),
+        "target_carboidrati_g": (0, 1000),
+        "target_grassi_g": (0, 1000),
+        "target_sonno_minuti": (0, 900),
+    }
     if chiave not in limiti:
         raise ErroreStrumento("Preferenza sconosciuta.")
     numero = _numero(valore, "valore", True)

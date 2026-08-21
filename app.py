@@ -92,6 +92,11 @@ def create_app():
             return None
         if request.path.startswith("/api/auth/"):
             return None
+        # L'ingest dei dati di salute lo chiama un'app Android, che un cookie
+        # di sessione non ce l'ha: si autentica da sola con un token fisso
+        # (vedi blueprints/api/salute.py), quindi qui va lasciata passare.
+        if request.path == "/api/health/ingest":
+            return None
         if not session.get("authenticated"):
             return api_error("UNAUTHORIZED", "Accesso non autenticato.", 401)
         return None

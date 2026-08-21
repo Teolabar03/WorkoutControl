@@ -1,4 +1,13 @@
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import {
+  Bar,
+  BarChart,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import { ChartTooltip } from "@/components/statistiche/ChartTooltip"
 
 export function BarTrendChart({
@@ -6,12 +15,15 @@ export function BarTrendChart({
   valori,
   unita,
   coloreBarra,
+  target,
 }: {
   labels: string[]
   valori: number[]
   unita?: string
   /** Colore per-barra (es. soglie di aderenza); default: primary per tutte. */
   coloreBarra?: (valore: number) => string
+  /** Obiettivo giornaliero da tracciare come linea; assente o 0 = non impostato. */
+  target?: number
 }) {
   const dati = labels.map((label, i) => ({ label, valore: valori[i] }))
 
@@ -35,6 +47,19 @@ export function BarTrendChart({
           content={<ChartTooltip unita={unita} />}
           cursor={{ fill: "var(--color-muted)", opacity: 0.4 }}
         />
+        {!!target && (
+          <ReferenceLine
+            y={target}
+            stroke="var(--color-accent)"
+            strokeDasharray="4 4"
+            label={{
+              value: `obiettivo ${target}`,
+              position: "insideTopRight",
+              fill: "var(--color-accent)",
+              fontSize: 11,
+            }}
+          />
+        )}
         <Bar dataKey="valore" radius={[4, 4, 0, 0]} maxBarSize={40} fill="var(--color-primary)">
           {coloreBarra &&
             dati.map((d, i) => <Cell key={i} fill={coloreBarra(d.valore)} />)}

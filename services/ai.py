@@ -41,7 +41,7 @@ from models import (
     PesoCorporeo,
     db,
 )
-from services import ai_tools, stats
+from services import ai_tools, salute, stats
 
 PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_GEMINI = "gemini"
@@ -761,6 +761,9 @@ def costruisci_payload(n_sessioni):
         .all()
     )
 
+    sonno, alimentazione = salute.riepilogo_salute(inizio_contesto)
+    profilo = _profilo()
+
     payload = {
         "generato_il": date.today().isoformat(),
         "numero_sessioni": len(sessioni_json),
@@ -769,9 +772,9 @@ def costruisci_payload(n_sessioni):
             "al": max(s.data for s in sessioni).isoformat(),
         },
         "nota_contesto": (
-            "Il diario dolori e il peso corporeo coprono anche i 30 giorni "
-            "precedenti al primo allenamento elencato, per dare contesto sulla "
-            "tendenza."
+            f"{_elenco_contesto(sonno, alimentazione)} coprono anche i 30 "
+            "giorni precedenti al primo allenamento elencato, per dare "
+            "contesto sulla tendenza."
         ),
         "sessioni": sessioni_json,
         "diario_dolori": [
@@ -789,7 +792,55 @@ def costruisci_payload(n_sessioni):
             for p in pesi
         ],
     }
+    # Altezza e obiettivi ci sono solo se l'utente li ha scritti: un "profilo"
+    # vuoto nel prompt sarebbe solo rumore.
+    if profilo:
+        payload["profilo"] = profilo
+    # Sonno e alimentazione arrivano da Samsung Health e possono benissimo non
+    # esserci: le chiavi si aggiungono solo se c'e' qualcosa da dire, cosi'
+    # senza l'integrazione il prompt resta identico a prima e l'assistente non
+    # si mette a commentare dati che non ha.
+    if sonno:
+        payload["sonno"] = sonno
+    if alimentazione:
+        payload["alimentazione"] = alimentazione
     return payload, [s.id for s in sessioni]
+
+
+def _elenco_contesto(sonno, alimentazione):
+    """I dati che si estendono oltre il periodo degli allenamenti elencati.
+
+    Sonno e alimentazione arrivano da Samsung Health e possono non esserci
+    affatto: nominarli comunque farebbe cercare al modello dati che non gli
+    sono stati passati.
+    """
+    voci = ["Il diario dolori", "il peso corporeo"]
+    if sonno:
+        voci.append("il sonno")
+    if alimentazione:
+        voci.append("l'alimentazione")
+    return ", ".join(voci[:-1]) + " e " + voci[-1]
+
+
+def _profilo():
+    """Altezza e obiettivi giornalieri, saltando quelli non impostati.
+
+    Sono valori scritti a mano dall'utente: zero vuol dire "non lo so", e un
+    obiettivo a zero letto come vero manderebbe l'assistente fuori strada.
+    """
+    campi = {
+        "altezza_cm": "altezza_cm",
+        "target_kcal": "kcal_al_giorno",
+        "target_proteine_g": "proteine_g_al_giorno",
+        "target_carboidrati_g": "carboidrati_g_al_giorno",
+        "target_grassi_g": "grassi_g_al_giorno",
+        "target_sonno_minuti": "sonno_minuti_a_notte",
+    }
+    return {
+        etichetta: Impostazione.get_int(chiave, 0)
+        for chiave, etichetta in campi.items()
+        if Impostazione.get_int(chiave, 0) > 0
+    }
 
 
 def _istruzioni():
