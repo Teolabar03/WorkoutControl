@@ -278,6 +278,17 @@ def ci_sono_dati():
     )
 
 
+def ci_sono_pasti():
+    """Vero se c'e' almeno un pasto registrato.
+
+    La sezione Nutrizione ha una sua condizione, separata da quella del sonno:
+    l'alimentazione e' il dato che Samsung Health riversa piu' malvolentieri su
+    Health Connect, e spesso arriva solo dall'export. Con un flag unico, chi ha
+    il sonno ma non i pasti si troverebbe una sezione perennemente vuota.
+    """
+    return db.session.query(PastoNutrizione.id).first() is not None
+
+
 def _vuoto(giorno):
     return {
         "data": giorno.isoformat(),

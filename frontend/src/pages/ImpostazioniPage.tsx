@@ -17,6 +17,7 @@ import { useCambiaModello, useModelliAi, useAvviaOllama, useStatoOllama } from "
 import { useCambiaModelloOllama, useImpostazioni, useModificaImpostazioni } from "@/hooks/useImpostazioni"
 import { useAppContext } from "@/hooks/useAppContext"
 import { SamsungHealthCard } from "@/components/impostazioni/SamsungHealthCard"
+import { ObiettiviCard } from "@/components/impostazioni/ObiettiviCard"
 
 export function ImpostazioniPage() {
   const { data: context } = useAppContext()
@@ -84,6 +85,8 @@ export function ImpostazioniPage() {
           Salva
         </Button>
       </form>
+
+      <ObiettiviCard />
 
       <SamsungHealthCard />
 

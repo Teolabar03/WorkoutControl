@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Dumbbell,
   HeartPulse,
+  Utensils,
   LogOut,
   Menu,
   NotebookPen,
@@ -24,7 +25,11 @@ interface NavItem {
   icon: typeof CalendarDays
 }
 
-function navItems(aiDisponibile: boolean, saluteCollegata: boolean): NavItem[] {
+function navItems(
+  aiDisponibile: boolean,
+  saluteCollegata: boolean,
+  nutrizioneDisponibile: boolean
+): NavItem[] {
   const base: NavItem[] = [
     { to: "/calendario", label: "Calendario", icon: CalendarDays },
     { to: "/schede", label: "Schede", icon: ClipboardList },
@@ -32,25 +37,29 @@ function navItems(aiDisponibile: boolean, saluteCollegata: boolean): NavItem[] {
   ]
   if (aiDisponibile) base.push({ to: "/chat", label: "Assistente AI", icon: Bot })
   base.push(
-    { to: "/peso", label: "Peso", icon: Scale },
+    { to: "/peso", label: "Peso e altezza", icon: Scale },
     { to: "/diario", label: "Diario", icon: NotebookPen }
   )
   // Come per l'assistente AI: la voce compare solo quando c'è qualcosa da
   // vederci dentro, cioè dopo il primo dato ricevuto da Samsung Health.
   if (saluteCollegata) base.push({ to: "/salute", label: "Salute", icon: HeartPulse })
+  // Condizione separata dal sonno: si puo' avere l'uno senza l'altra.
+  if (nutrizioneDisponibile) base.push({ to: "/nutrizione", label: "Nutrizione", icon: Utensils })
   return base
 }
 
 export function TopBar({
   aiDisponibile,
   saluteCollegata,
+  nutrizioneDisponibile,
 }: {
   aiDisponibile: boolean
   saluteCollegata: boolean
+  nutrizioneDisponibile: boolean
 }) {
   const logout = useLogout()
   const [menuAperto, setMenuAperto] = useState(false)
-  const items = navItems(aiDisponibile, saluteCollegata)
+  const items = navItems(aiDisponibile, saluteCollegata, nutrizioneDisponibile)
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">

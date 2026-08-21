@@ -11,6 +11,7 @@ export function Layout() {
       <TopBar
         aiDisponibile={context?.ai_disponibile ?? false}
         saluteCollegata={context?.salute_collegata ?? false}
+        nutrizioneDisponibile={context?.nutrizione_disponibile ?? false}
       />
       <SessioneBanner sessione={context?.sessione_corrente ?? null} />
       <main className="mx-auto max-w-5xl px-3 py-4 sm:px-6 sm:py-6">

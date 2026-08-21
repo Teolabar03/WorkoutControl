@@ -16,6 +16,7 @@ import { SessioneManualePage } from "@/pages/SessioneManualePage"
 import { StatistichePage } from "@/pages/StatistichePage"
 import { PesoPage } from "@/pages/PesoPage"
 import { SalutePage } from "@/pages/SalutePage"
+import { NutrizionePage } from "@/pages/NutrizionePage"
 import { DiarioPage } from "@/pages/DiarioPage"
 import { ChatPage } from "@/pages/ChatPage"
 import { ImpostazioniPage } from "@/pages/ImpostazioniPage"
@@ -66,6 +67,7 @@ function App() {
               {/* La pagina si difende da sola: senza sincronizzazione col
                   telefono rimanda al calendario invece di mostrarsi vuota. */}
               <Route path="salute" element={<SalutePage />} />
+              <Route path="nutrizione" element={<NutrizionePage />} />
               <Route path="diario" element={<DiarioPage />} />
               <Route path="chat" element={<ChatPage />} />
               <Route path="chat/:conversazioneId" element={<ChatPage />} />

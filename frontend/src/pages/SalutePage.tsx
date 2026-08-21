@@ -5,7 +5,6 @@ import { ChartCard } from "@/components/statistiche/ChartCard"
 import { BarTrendChart } from "@/components/statistiche/BarTrendChart"
 import { LineTrendChart } from "@/components/statistiche/LineTrendChart"
 import { MetricTile } from "@/components/statistiche/MetricTile"
-import { MacroChart } from "@/components/salute/MacroChart"
 import { dataIt, numeroIt } from "@/lib/format"
 import { useAppContext } from "@/hooks/useAppContext"
 import { useImpostazioni } from "@/hooks/useImpostazioni"
@@ -44,11 +43,9 @@ export function SalutePage() {
   // da sinistra a destra.
   const cronologiche: GiornoSalute[] = [...(righe ?? [])].reverse()
   const conSonno = cronologiche.filter((g) => g.sonno_minuti > 0)
-  const conCibo = cronologiche.filter((g) => g.kcal !== null)
   const conPeso = cronologiche.filter((g) => g.peso_kg !== null)
 
   const mediaSonno = media(conSonno.map((g) => g.sonno_minuti))
-  const mediaKcal = media(conCibo.map((g) => g.kcal as number))
   const ultimaNotte = conSonno.at(-1)
   const targetSonnoOre = impostazioni?.target_sonno_minuti
     ? Number((impostazioni.target_sonno_minuti / 60).toFixed(1))
@@ -84,9 +81,9 @@ export function SalutePage() {
           nota={ultimaNotte ? dataIt(ultimaNotte.data) : undefined}
         />
         <MetricTile
-          etichetta="Calorie medie"
-          valore={mediaKcal === null ? "—" : `${Math.round(mediaKcal)}`}
-          nota={`${conCibo.length} giorni con pasti`}
+          etichetta="Notte più lunga"
+          valore={conSonno.length ? oreEMinuti(Math.max(...conSonno.map((g) => g.sonno_minuti))) : "—"}
+          nota={`ultimi ${giorni} giorni`}
         />
         <MetricTile
           etichetta="Ultimo peso"
@@ -102,26 +99,6 @@ export function SalutePage() {
             valori={conSonno.map((g) => Number((g.sonno_minuti / 60).toFixed(1)))}
             unita="ore"
             target={targetSonnoOre}
-          />
-        </ChartCard>
-
-        <ChartCard titolo="Calorie" vuoto={conCibo.length === 0}>
-          <BarTrendChart
-            labels={conCibo.map((g) => etichettaBreve(g.data))}
-            valori={conCibo.map((g) => Math.round(g.kcal as number))}
-            unita="kcal"
-            target={impostazioni?.target_kcal || undefined}
-          />
-        </ChartCard>
-
-        <ChartCard titolo="Macronutrienti" vuoto={conCibo.length === 0}>
-          <MacroChart
-            dati={conCibo.map((g) => ({
-              label: etichettaBreve(g.data),
-              proteine: Math.round(g.proteine_g ?? 0),
-              carboidrati: Math.round(g.carboidrati_g ?? 0),
-              grassi: Math.round(g.grassi_g ?? 0),
-            }))}
           />
         </ChartCard>
 
