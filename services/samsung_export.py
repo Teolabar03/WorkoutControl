@@ -21,13 +21,11 @@ Formato dell'export, verificato su un file vero (Samsung Health 7.6):
 """
 
 import csv
-import io
 import zipfile
 from datetime import datetime, timedelta
 
 from models import ORIGINE_SAMSUNG, Impostazione, db
-from services.ai_tools import registra_peso_corporeo
-from services.salute import registra_pasto, registra_sonno
+from services.salute import registra_pasto, registra_peso_se_manca, registra_sonno
 
 # Nomi dei dataset che ci interessano. Il resto dell'export (battito, passi,
 # stress: la stragrande maggioranza dei file) non viene nemmeno aperto.
@@ -169,11 +167,11 @@ def _importa_peso(tabelle):
         offset = _offset(riga.get("time_offset"))
         momento = _momento(riga.get("start_time"), offset)
         kg = _decimale(riga.get("weight"))
-        if momento is None or not kg or kg <= 0:
+        if momento is None:
             continue
-        registra_peso_corporeo(
-            valore_kg=kg, data=momento.date().isoformat(), note=riga.get("comment") or ""
-        )
+        # Non sovrascrive una pesata gia' presente: vedi registra_peso_se_manca.
+        if registra_peso_se_manca(kg, momento.date(), riga.get("comment") or "") is None:
+            continue
         n += 1
         altezza = _decimale(riga.get("height")) or altezza
 
