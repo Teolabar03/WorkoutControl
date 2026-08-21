@@ -71,7 +71,24 @@ def ingest_route():
         raise ApiError("PAYLOAD_TROPPO_GRANDE", "Payload troppo grande.", 413)
 
     payload = request.get_json(force=True, silent=True) or {}
-    return api_ok(salute.ingerisci_health_connect(payload))
+    conteggi = salute.ingerisci_health_connect(payload)
+
+    if not any(conteggi.values()):
+        # Una sincronizzazione che non produce niente e' ambigua: puo' voler dire
+        # che il telefono non aveva dati nuovi, oppure che li manda sotto nomi
+        # che non riconosciamo. Si annota la FORMA del payload — nomi delle
+        # chiavi e quanti elementi ciascuna — mai i valori, che sono dati
+        # sanitari. Senza, l'unica alternativa sarebbe tirare a indovinare.
+        current_app.logger.info(
+            "Ingest senza dati utili: %s",
+            {
+                chiave: (len(valore) if isinstance(valore, list) else type(valore).__name__)
+                for chiave, valore in payload.items()
+            }
+            if isinstance(payload, dict)
+            else type(payload).__name__,
+        )
+    return api_ok(conteggi)
 
 
 def _token_valido(atteso):
