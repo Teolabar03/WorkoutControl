@@ -50,6 +50,16 @@ class Impostazione(db.Model):
         # "provider:id_modello" (es. "anthropic:claude-opus-5"). Vuoto vuol dire
         # "decidi tu": vale la precedenza automatica fra i provider configurati.
         "ai_modello": "",
+        # Altezza in cm: serve solo a calcolare il BMI nella pagina del peso.
+        # Zero vuol dire "non impostata" e il BMI semplicemente non compare.
+        "altezza_cm": "0",
+        # Obiettivi giornalieri disegnati come linea di riferimento sui grafici
+        # della sezione Salute. Zero = nessun obiettivo, nessuna linea.
+        "target_kcal": "0",
+        "target_proteine_g": "0",
+        "target_carboidrati_g": "0",
+        "target_grassi_g": "0",
+        "target_sonno_minuti": "0",
     }
 
     @staticmethod
@@ -270,6 +280,68 @@ class PesoCorporeo(db.Model):
     data = db.Column(db.Date, nullable=False, unique=True, index=True)
     valore_kg = db.Column(db.Float, nullable=False)
     note = db.Column(db.Text, nullable=False, default="")
+
+
+# Da dove arriva un dato di salute: scritto a mano nell'app o sincronizzato da
+# Samsung Health via Health Connect (vedi services/salute.py).
+ORIGINE_MANUALE = "manuale"
+ORIGINE_SAMSUNG = "samsung_health"
+
+
+class SonnoNotte(db.Model):
+    """Una dormita importata da Health Connect.
+
+    `inizio` e' unico perche' fa da chiave di deduplica: l'app ponte rispedisce
+    a ogni sincronizzazione una finestra mobile di 48 ore, quindi la stessa
+    notte arriva piu' volte e va aggiornata in loco invece che riscritta.
+    """
+
+    __tablename__ = "sonno_notte"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inizio = db.Column(db.DateTime, nullable=False, unique=True, index=True)
+    fine = db.Column(db.DateTime, nullable=False)
+    # Giorno del risveglio, non dell'addormentamento: e' quello in cui la
+    # dormita "conta" per l'allenamento e per i grafici.
+    data = db.Column(db.Date, nullable=False, index=True)
+    durata_minuti = db.Column(db.Integer, nullable=False, default=0)
+    minuti_profondo = db.Column(db.Integer, nullable=True)
+    minuti_rem = db.Column(db.Integer, nullable=True)
+    minuti_leggero = db.Column(db.Integer, nullable=True)
+    minuti_sveglio = db.Column(db.Integer, nullable=True)
+    origine = db.Column(db.String(40), nullable=False, default=ORIGINE_SAMSUNG)
+
+    @property
+    def ore(self):
+        return round(self.durata_minuti / 60, 2)
+
+
+class PastoNutrizione(db.Model):
+    """Un pasto registrato in Samsung Health e importato via Health Connect.
+
+    Si tengono i singoli pasti e non il totale del giorno: i totali si calcolano
+    al volo (services/salute.py) e restano corretti anche quando un pasto arriva
+    in ritardo o viene corretto a posteriori.
+    """
+
+    __tablename__ = "pasto_nutrizione"
+
+    id = db.Column(db.Integer, primary_key=True)
+    inizio = db.Column(db.DateTime, nullable=False, index=True)
+    data = db.Column(db.Date, nullable=False, index=True)
+    nome = db.Column(db.String(160), nullable=False, default="")
+    kcal = db.Column(db.Float, nullable=True)
+    proteine_g = db.Column(db.Float, nullable=True)
+    carboidrati_g = db.Column(db.Float, nullable=True)
+    grassi_g = db.Column(db.Float, nullable=True)
+    fibre_g = db.Column(db.Float, nullable=True)
+    zuccheri_g = db.Column(db.Float, nullable=True)
+    origine = db.Column(db.String(40), nullable=False, default=ORIGINE_SAMSUNG)
+
+    # Stessa logica di SonnoNotte: orario piu' nome identificano il pasto fra
+    # una sincronizzazione e l'altra, cosi' i reinvii aggiornano invece di
+    # duplicare.
+    __table_args__ = (db.UniqueConstraint("inizio", "nome", name="uq_pasto_origine"),)
 
 
 # Su cosa si misura il record di un esercizio.

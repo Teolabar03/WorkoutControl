@@ -8,7 +8,7 @@ from flask import Blueprint
 
 from schemas import api_ok
 from serializers import serialize_sessione
-from services import ai
+from services import ai, salute
 
 from .sessione import sessione_in_corso
 
@@ -23,5 +23,9 @@ def context_route():
             "sessione_corrente": serialize_sessione(in_corso) if in_corso else None,
             "oggi": date.today().isoformat(),
             "ai_disponibile": ai.disponibile(),
+            # Finche' dal telefono non e' mai arrivato niente, la sezione
+            # Salute non esiste per l'app: stessa logica di ai_disponibile,
+            # che fa sparire l'assistente quando non c'e' un provider.
+            "salute_collegata": salute.ci_sono_dati(),
         }
     )
