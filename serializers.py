@@ -120,6 +120,29 @@ def serialize_peso_corporeo(m):
     }
 
 
+def serialize_pasto(p):
+    """Un singolo pasto, con tutto quello che ne sappiamo.
+
+    Gli aggregati giornalieri di `services/salute.py` sommano solo kcal e i tre
+    macro principali: fibre e zuccheri esistono nel database (l'export di
+    Samsung Health li porta) ma non erano esposti da nessuna parte. Qui ci sono,
+    a null quando la sorgente non li ha dati.
+    """
+    return {
+        "id": p.id,
+        "data": p.data.isoformat(),
+        "inizio": p.inizio.isoformat(),
+        "nome": p.nome,
+        "kcal": p.kcal,
+        "proteine_g": p.proteine_g,
+        "carboidrati_g": p.carboidrati_g,
+        "grassi_g": p.grassi_g,
+        "fibre_g": p.fibre_g,
+        "zuccheri_g": p.zuccheri_g,
+        "origine": p.origine,
+    }
+
+
 def serialize_pr(p):
     return {
         "id": p.id,

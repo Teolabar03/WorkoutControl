@@ -60,6 +60,12 @@ class Impostazione(db.Model):
         "target_carboidrati_g": "0",
         "target_grassi_g": "0",
         "target_sonno_minuti": "0",
+        # Gli obiettivi non sono bersagli da centrare al grammo: un giorno a
+        # 2280 kcal su 2300 e' centrato quanto uno esatto. Questa percentuale li
+        # trasforma in un intervallo (10 su 2300 -> 2070-2530). Una tolleranza
+        # sola per tutti: sono tutte "quanto posso sbagliare", e cinque campi
+        # separati sarebbero cinque modi di scrivere lo stesso 10.
+        "target_tolleranza_pct": "10",
     }
 
     @staticmethod
@@ -342,6 +348,47 @@ class PastoNutrizione(db.Model):
     # una sincronizzazione e l'altra, cosi' i reinvii aggiornano invece di
     # duplicare.
     __table_args__ = (db.UniqueConstraint("inizio", "nome", name="uq_pasto_origine"),)
+
+
+class MisuraSalute(db.Model):
+    """Una misura di salute qualsiasi arrivata dal telefono.
+
+    Health Connect espone una trentina di tipi di dato — passi, battito,
+    saturazione, idratazione, composizione corporea — e l'app ponte li spedisce
+    tutti insieme. Sonno, alimentazione e peso hanno tabelle proprie perche'
+    hanno una logica di dominio (le fasi, i macro, il BMI); tutto il resto e'
+    "un numero a un istante" e la forma non cambia fra i passi e il battito,
+    quindi sta qui, in una tabella sola, distinto dalla colonna `tipo`.
+
+    Il vantaggio e' che un tipo nuovo non richiede una migrazione: basta
+    aggiungerlo al catalogo METRICHE in services/salute.py.
+
+    `valore_secondario` esiste per la pressione, l'unico tipo a due numeri
+    (sistolica e diastolica) che valga la pena tenere.
+    """
+
+    __tablename__ = "misura_salute"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # La chiave del catalogo, cioe' il nome del record type di Health Connect
+    # ("steps", "heart_rate"): si tiene quello e non un id numerico, cosi' il
+    # dato resta leggibile anche guardando il database a mano.
+    tipo = db.Column(db.String(60), nullable=False, index=True)
+    inizio = db.Column(db.DateTime, nullable=False, index=True)
+    # Solo per le misure che coprono un intervallo (passi, distanza, calorie):
+    # per un battito istantaneo resta vuota.
+    fine = db.Column(db.DateTime, nullable=True)
+    data = db.Column(db.Date, nullable=False, index=True)
+    valore = db.Column(db.Float, nullable=False)
+    valore_secondario = db.Column(db.Float, nullable=True)
+    origine = db.Column(db.String(40), nullable=False, default=ORIGINE_SAMSUNG)
+
+    # Stessa deduplica di SonnoNotte e PastoNutrizione: l'app ponte rispedisce
+    # una finestra di 48 ore a ogni sincronizzazione, quindi la stessa misura
+    # arriva piu' volte e va aggiornata in loco invece che riscritta.
+    __table_args__ = (
+        db.UniqueConstraint("tipo", "inizio", name="uq_misura_tipo_inizio"),
+    )
 
 
 # Su cosa si misura il record di un esercizio.

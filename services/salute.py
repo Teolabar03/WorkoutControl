@@ -12,14 +12,17 @@ naturale (l'orario di inizio) e non un insert.
 """
 
 from datetime import date, datetime, timedelta
+from typing import NamedTuple
 
 from models import (
     ORIGINE_SAMSUNG,
+    MisuraSalute,
     PastoNutrizione,
     PesoCorporeo,
     SonnoNotte,
     db,
 )
+from serializers import serialize_pasto
 from services.ai_tools import registra_peso_corporeo
 
 # Tetto per singola sincronizzazione: l'endpoint di ingest e' l'unico
@@ -34,6 +37,89 @@ FASI = {
     "leggero": {"LIGHT", "SLEEPING", "SLEEP"},
     "sveglio": {"AWAKE", "AWAKE_IN_BED", "OUT_OF_BED"},
 }
+
+
+# --- Catalogo delle metriche generiche ------------------------------------
+#
+# Health Connect espone una trentina di tipi di dato. Sonno, alimentazione e
+# peso hanno un gestore dedicato piu' sotto, perche' hanno una logica di dominio
+# (le fasi, i macro, il fatto che il peso non debba sovrascrivere quello scritto
+# a mano). Tutto il resto e' "un numero a un istante" e passa da qui: una riga di
+# questo dizionario basta a farlo entrare nel database e comparire nella pagina
+# Salute, senza toccare nient'altro.
+#
+# Serve perche' non sappiamo in anticipo cosa il telefono manda davvero: dipende
+# da quali permessi l'app ponte ha ottenuto e da cosa Samsung Health riversa
+# sull'hub. Meglio riconoscere tutto e mostrare solo quello che arriva, che
+# scrivere un gestore per volta a ogni scoperta.
+
+
+class Metrica(NamedTuple):
+    """Come si legge, si aggrega e si mostra un tipo di misura."""
+
+    etichetta: str
+    unita: str
+    # Alias del campo che porta il valore, letti con `_primo`: i nomi arrivano
+    # da un'app di terze parti e cambiano fra una versione e l'altra.
+    campi: tuple
+    # Come si riassume una giornata che contiene piu' misure dello stesso tipo.
+    # I passi si sommano, il battito si media, la massa grassa e' l'ultima
+    # rilevazione — sommare due pesate darebbe un numero senza senso.
+    aggregazione: str
+    decimali: int = 1
+    fattore: float = 1.0
+    campo_secondario: str = ""
+
+
+SOMMA, MEDIA, ULTIMO = "somma", "media", "ultimo"
+
+METRICHE = {
+    "steps": Metrica("Passi", "", ("count", "steps"), SOMMA, decimali=0),
+    "distance": Metrica(
+        "Distanza", "km", ("meters", "distance_meters"), SOMMA, fattore=0.001
+    ),
+    "active_calories": Metrica(
+        "Calorie attive", "kcal", ("calories", "kilocalories"), SOMMA, decimali=0
+    ),
+    "total_calories": Metrica(
+        "Calorie totali", "kcal", ("calories", "kilocalories"), SOMMA, decimali=0
+    ),
+    "hydration": Metrica("Idratazione", "L", ("liters", "volume_liters"), SOMMA),
+    "heart_rate": Metrica("Battito", "bpm", ("bpm", "beats_per_minute"), MEDIA, 0),
+    "resting_heart_rate": Metrica(
+        "Battito a riposo", "bpm", ("bpm", "beats_per_minute"), MEDIA, 0
+    ),
+    "heart_rate_variability": Metrica(
+        "Variabilita' HR", "ms", ("rmssd_millis", "rmssd"), MEDIA
+    ),
+    "oxygen_saturation": Metrica(
+        "Saturazione", "%", ("percentage", "percent"), MEDIA, 0
+    ),
+    "respiratory_rate": Metrica("Respiro", "atti/min", ("rate",), MEDIA, 0),
+    "body_temperature": Metrica("Temperatura", "°C", ("celsius",), MEDIA),
+    "basal_body_temperature": Metrica(
+        "Temperatura basale", "°C", ("celsius",), MEDIA
+    ),
+    "body_fat": Metrica("Massa grassa", "%", ("percentage", "percent"), ULTIMO),
+    "lean_body_mass": Metrica("Massa magra", "kg", ("kilograms", "kg"), ULTIMO),
+    "bone_mass": Metrica("Massa ossea", "kg", ("kilograms", "kg"), ULTIMO),
+    "vo2_max": Metrica(
+        "VO2 max", "ml/kg/min", ("ml_per_kg_per_min", "vo2_millilitersper_min_kilogram"), ULTIMO
+    ),
+    "basal_metabolic_rate": Metrica("Metabolismo basale", "W", ("watts",), MEDIA, 0),
+    "blood_glucose": Metrica(
+        "Glicemia", "mmol/L", ("mmol_per_liter", "level"), MEDIA
+    ),
+    "blood_pressure": Metrica(
+        "Pressione", "mmHg", ("systolic",), MEDIA, 0, campo_secondario="diastolic"
+    ),
+}
+
+# Fuori dal catalogo di proposito, non per dimenticanza:
+# - "height" si inserisce a mano nella pagina del peso ed e' gia' li';
+# - "exercise" sono le sessioni che il telefono crede allenamenti, e non vanno
+#   confuse con le schede eseguite, che sono il cuore di quest'app;
+# - i tipi legati al ciclo mestruale e all'attivita' sessuale non c'entrano.
 
 
 # --- Parsing difensivo del payload ----------------------------------------
@@ -234,13 +320,55 @@ def _ingerisci_peso(record):
     return registra_peso_se_manca(kg, momento.date())
 
 
+def registra_misura(tipo, inizio, valore, fine=None, secondario=None,
+                    origine=ORIGINE_SAMSUNG):
+    """Salva (o aggiorna) una misura generica. Chiave: tipo piu' orario."""
+    if inizio is None or valore is None:
+        return None
+
+    misura = (
+        db.session.query(MisuraSalute).filter_by(tipo=tipo, inizio=inizio).first()
+    )
+    if misura is None:
+        misura = MisuraSalute(tipo=tipo, inizio=inizio)
+        db.session.add(misura)
+    misura.fine = fine
+    misura.data = inizio.date()
+    misura.valore = valore
+    misura.valore_secondario = secondario
+    misura.origine = origine
+    return misura
+
+
+def _ingerisci_misura(tipo, metrica, record):
+    """Un record qualsiasi del catalogo, letto secondo il suo descrittore."""
+    inizio = _dt(_primo(record, "time", "start_time", "startTime"))
+    fine = _dt(_primo(record, "end_time", "endTime"))
+    valore = _numero(_primo(record, *metrica.campi))
+    if valore is None:
+        return None
+    secondario = (
+        _numero(record.get(metrica.campo_secondario))
+        if metrica.campo_secondario
+        else None
+    )
+    return registra_misura(
+        tipo, inizio, valore * metrica.fattore, fine=fine, secondario=secondario
+    )
+
+
 def ingerisci_health_connect(payload):
     """Salva quello che riconosciamo di un payload di HC Webhook.
 
-    Il payload contiene tutti i tipi che l'app ponte legge da Health Connect
-    (passi, battito, saturazione...): qui interessano solo sonno, peso e
-    alimentazione, il resto viene ignorato senza errore. Un tipo assente e'
-    normale, non un problema.
+    Tre tipi hanno un gestore dedicato — sonno, alimentazione e peso — perche'
+    hanno una loro logica di dominio e una tabella propria. Tutti gli altri
+    passano dal catalogo METRICHE e finiscono in `misura_salute`: cosi' quando
+    il telefono comincia a mandare i passi o il battito il dato viene raccolto
+    senza aspettare una modifica al codice.
+
+    Un tipo assente e' normale, non un problema; una chiave che non conosciamo
+    viene ignorata senza errore, e la diagnostica del blueprint ne annota la
+    forma se la sincronizzazione si chiude a zero.
     """
     if not isinstance(payload, dict):
         return {"sonno": 0, "pasti": 0, "peso": 0}
@@ -257,6 +385,20 @@ def ingerisci_health_connect(payload):
         for voce in record[:MAX_RECORD_PER_TIPO]:
             if isinstance(voce, dict) and gestore(voce) is not None:
                 conteggi[etichetta] += 1
+
+    for tipo, metrica in METRICHE.items():
+        record = payload.get(tipo)
+        if not isinstance(record, list):
+            continue
+        salvati = 0
+        for voce in record[:MAX_RECORD_PER_TIPO]:
+            if isinstance(voce, dict) and _ingerisci_misura(tipo, metrica, voce):
+                salvati += 1
+        # Solo i tipi che hanno prodotto qualcosa entrano nei conteggi: la
+        # risposta descrive cosa e' arrivato, e un elenco di zeri per venti tipi
+        # mai visti sarebbe rumore sia nei log sia nel pannello di Impostazioni.
+        if salvati:
+            conteggi[tipo] = salvati
 
     db.session.commit()
     return conteggi
@@ -275,6 +417,9 @@ def ci_sono_dati():
     return bool(
         db.session.query(SonnoNotte.id).first()
         or db.session.query(PastoNutrizione.id).first()
+        # Anche una metrica generica basta: chi ha dato il permesso ai passi ma
+        # non al sonno deve comunque vedere la sezione.
+        or db.session.query(MisuraSalute.id).first()
     )
 
 
@@ -371,6 +516,93 @@ def giorni_salute(dal, al):
     return righe
 
 
+def pasti_periodo(dal, al):
+    """I singoli pasti del periodo, dal giorno piu' recente.
+
+    Dentro la giornata l'ordine e' cronologico: la colazione prima della cena,
+    che e' come uno se li aspetta leggendo un diario alimentare.
+    """
+    pasti = (
+        db.session.query(PastoNutrizione)
+        .filter(PastoNutrizione.data >= dal, PastoNutrizione.data <= al)
+        .order_by(PastoNutrizione.data.desc(), PastoNutrizione.inizio.asc())
+        .all()
+    )
+    return [serialize_pasto(p) for p in pasti]
+
+
+def metriche_disponibili(dal, al):
+    """Le metriche generiche che nel periodo hanno davvero dei valori.
+
+    Solo quelle: e' questa la regola che fa comparire i passi il giorno in cui
+    cominciano ad arrivare e tiene invisibile per sempre quello che non arriva
+    mai. Una griglia di venti card vuote sarebbe peggio di nessuna card.
+
+    Ogni giorno e' riassunto secondo il descrittore del catalogo — i passi si
+    sommano, il battito si media, la massa grassa e' l'ultima rilevazione.
+    """
+    righe = (
+        db.session.query(MisuraSalute)
+        .filter(MisuraSalute.data >= dal, MisuraSalute.data <= al)
+        .order_by(MisuraSalute.inizio.asc())
+        .all()
+    )
+
+    per_tipo = {}
+    for misura in righe:
+        per_tipo.setdefault(misura.tipo, []).append(misura)
+
+    risultato = []
+    for tipo, misure in per_tipo.items():
+        metrica = METRICHE.get(tipo)
+        if metrica is None:
+            # Un tipo salvato da una versione precedente del catalogo e poi
+            # tolto: i dati restano nel database, ma non sappiamo piu' come
+            # mostrarli e inventarsi un'etichetta sarebbe peggio che tacere.
+            continue
+
+        per_giorno = {}
+        for misura in misure:
+            per_giorno.setdefault(misura.data, []).append(misura.valore)
+
+        giorni = []
+        for giorno in sorted(per_giorno):
+            valori = per_giorno[giorno]
+            if metrica.aggregazione == SOMMA:
+                valore = sum(valori)
+            elif metrica.aggregazione == ULTIMO:
+                valore = valori[-1]
+            else:
+                valore = sum(valori) / len(valori)
+            giorni.append(
+                {"data": giorno.isoformat(), "valore": round(valore, metrica.decimali)}
+            )
+
+        # La media del periodo si fa sui totali giornalieri, non sulle singole
+        # misure: "10.000 passi al giorno" e' la domanda a cui si risponde, e
+        # mediare le decine di letture di un contapassi darebbe tutt'altro.
+        media_periodo = sum(g["valore"] for g in giorni) / len(giorni)
+        risultato.append(
+            {
+                "tipo": tipo,
+                "etichetta": metrica.etichetta,
+                "unita": metrica.unita,
+                "decimali": metrica.decimali,
+                "aggregazione": metrica.aggregazione,
+                "ultimo_valore": giorni[-1]["valore"],
+                "ultima_data": giorni[-1]["data"],
+                "media": round(media_periodo, metrica.decimali),
+                "giorni": giorni,
+            }
+        )
+
+    # L'ordine del catalogo e non quello alfabetico: mette i passi e le calorie
+    # prima della massa ossea, che e' l'ordine in cui interessano.
+    posizione = list(METRICHE)
+    risultato.sort(key=lambda m: posizione.index(m["tipo"]))
+    return risultato
+
+
 def ultimo_aggiornamento():
     """Data dell'ultimo dato ricevuto per tipo, per il pannello in Impostazioni."""
 
@@ -380,10 +612,28 @@ def ultimo_aggiornamento():
             return valore
         return valore.isoformat() if valore else None
 
+    # I tipi generici non sono noti in anticipo: si elenca quello che c'e'
+    # davvero, cosi' il pannello in Impostazioni mostra cosa il telefono sta
+    # effettivamente mandando invece di tre riquadri fissi.
+    righe = (
+        db.session.query(MisuraSalute.tipo, db.func.max(MisuraSalute.data))
+        .group_by(MisuraSalute.tipo)
+        .all()
+    )
+    metriche = [
+        {
+            "tipo": tipo,
+            "etichetta": METRICHE[tipo].etichetta if tipo in METRICHE else tipo,
+            "ultima_data": ultima.isoformat() if hasattr(ultima, "isoformat") else ultima,
+        }
+        for tipo, ultima in sorted(righe)
+    ]
+
     return {
         "ultimo_sonno": _ultimo(SonnoNotte.data),
         "ultimo_pasto": _ultimo(PastoNutrizione.data),
         "ultimo_peso": _ultimo(PesoCorporeo.data),
+        "metriche": metriche,
     }
 
 

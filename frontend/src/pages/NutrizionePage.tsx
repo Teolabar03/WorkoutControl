@@ -6,28 +6,22 @@ import { BarTrendChart } from "@/components/statistiche/BarTrendChart"
 import { MetricTile } from "@/components/statistiche/MetricTile"
 import { MacroChart } from "@/components/salute/MacroChart"
 import { TargetProgress } from "@/components/nutrizione/TargetProgress"
-import { dataIt, numeroIt } from "@/lib/format"
+import { GiornoPasti } from "@/components/nutrizione/GiornoPasti"
+import { dataIt, etichettaBreve, media, numeroIt } from "@/lib/format"
+import { rangeObiettivo, statoObiettivo } from "@/lib/obiettivi"
 import { useAppContext } from "@/hooks/useAppContext"
 import { useImpostazioni } from "@/hooks/useImpostazioni"
-import { useSalute } from "@/hooks/useSalute"
-import type { GiornoSalute } from "@/api/salute"
+import { usePasti, useSalute } from "@/hooks/useSalute"
+import type { GiornoSalute, Pasto } from "@/api/salute"
 
 const PERIODI = [30, 90]
-
-function etichettaBreve(iso: string) {
-  return dataIt(iso).slice(0, 5)
-}
-
-function media(valori: number[]) {
-  if (valori.length === 0) return null
-  return valori.reduce((somma, v) => somma + v, 0) / valori.length
-}
 
 export function NutrizionePage() {
   const { data: context, isPending } = useAppContext()
   const { data: impostazioni } = useImpostazioni()
   const [giorni, setGiorni] = useState(PERIODI[0])
   const { data: righe } = useSalute(giorni)
+  const { data: pasti } = usePasti(giorni)
 
   if (isPending) return null
   if (!context?.nutrizione_disponibile) return <Navigate to="/calendario" replace />
@@ -41,13 +35,30 @@ export function NutrizionePage() {
   const giornoOggi = conCibo.find((g) => g.data === oggi)
   const mediaKcal = media(conCibo.map((g) => g.kcal as number))
 
+  // Gli obiettivi sono intervalli, non numeri secchi: la tolleranza scelta in
+  // Impostazioni li allarga, e tutto quello che li mostra parte da qui.
+  const tolleranza = impostazioni?.target_tolleranza_pct ?? 0
+  const rangeKcal = rangeObiettivo(impostazioni?.target_kcal ?? 0, tolleranza)
   const obiettivi = [
-    { etichetta: "Calorie", valore: giornoOggi?.kcal ?? null, target: impostazioni?.target_kcal ?? 0, unita: "kcal" },
-    { etichetta: "Proteine", valore: giornoOggi?.proteine_g ?? null, target: impostazioni?.target_proteine_g ?? 0, unita: "g" },
-    { etichetta: "Carboidrati", valore: giornoOggi?.carboidrati_g ?? null, target: impostazioni?.target_carboidrati_g ?? 0, unita: "g" },
-    { etichetta: "Grassi", valore: giornoOggi?.grassi_g ?? null, target: impostazioni?.target_grassi_g ?? 0, unita: "g" },
+    { etichetta: "Calorie", valore: giornoOggi?.kcal ?? null, range: rangeKcal, unita: "kcal" },
+    { etichetta: "Proteine", valore: giornoOggi?.proteine_g ?? null, range: rangeObiettivo(impostazioni?.target_proteine_g ?? 0, tolleranza), unita: "g" },
+    { etichetta: "Carboidrati", valore: giornoOggi?.carboidrati_g ?? null, range: rangeObiettivo(impostazioni?.target_carboidrati_g ?? 0, tolleranza), unita: "g" },
+    { etichetta: "Grassi", valore: giornoOggi?.grassi_g ?? null, range: rangeObiettivo(impostazioni?.target_grassi_g ?? 0, tolleranza), unita: "g" },
   ]
-  const senzaObiettivi = obiettivi.every((o) => !o.target)
+  const senzaObiettivi = obiettivi.every((o) => !o.range)
+
+  // I pasti arrivano piatti: si raggruppano per giorno mantenendo l'ordine del
+  // server, che li dà dal piu' recente.
+  const perGiorno = new Map<string, Pasto[]>()
+  for (const pasto of pasti ?? []) {
+    const gruppo = perGiorno.get(pasto.data)
+    if (gruppo) gruppo.push(pasto)
+    else perGiorno.set(pasto.data, [pasto])
+  }
+  const giorniInLinea = rangeKcal
+    ? conCibo.filter((g) => statoObiettivo(g.kcal as number, rangeKcal) === "dentro").length
+    : null
+  const mediaPasti = conCibo.length ? (pasti?.length ?? 0) / conCibo.length : null
 
   return (
     <div className="space-y-6">
@@ -102,8 +113,9 @@ export function NutrizionePage() {
           nota={`ultimi ${giorni} giorni`}
         />
         <MetricTile
-          etichetta="Ultimo giorno"
-          valore={conCibo.length ? dataIt(conCibo.at(-1)!.data) : "—"}
+          etichetta="Giorni in linea"
+          valore={giorniInLinea === null ? "—" : `${giorniInLinea}/${conCibo.length}`}
+          nota={giorniInLinea === null ? "nessun obiettivo" : "calorie nel range"}
         />
         <MetricTile
           etichetta="Media proteine"
@@ -121,6 +133,8 @@ export function NutrizionePage() {
             valori={conCibo.map((g) => Math.round(g.kcal as number))}
             unita="kcal"
             target={impostazioni?.target_kcal || undefined}
+            targetMin={rangeKcal?.min}
+            targetMax={rangeKcal?.max}
           />
         </ChartCard>
 
@@ -135,6 +149,33 @@ export function NutrizionePage() {
           />
         </ChartCard>
       </div>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-heading text-lg font-semibold">Pasti</h2>
+          <p className="text-sm tabular-nums text-muted-foreground">
+            {mediaPasti === null
+              ? "—"
+              : `${numeroIt(Math.round(mediaPasti * 10) / 10)} pasti al giorno in media`}
+          </p>
+        </div>
+        {perGiorno.size === 0 ? (
+          <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+            Nessun pasto registrato negli ultimi {giorni} giorni.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {[...perGiorno.entries()].map(([data, pastiDelGiorno]) => (
+              <GiornoPasti
+                key={data}
+                data={data}
+                pasti={pastiDelGiorno}
+                rangeKcal={rangeKcal}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

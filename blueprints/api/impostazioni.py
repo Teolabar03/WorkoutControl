@@ -21,7 +21,8 @@ bp = Blueprint("api_impostazioni", __name__, url_prefix="/api")
 # Preferenze numeriche gestite tutte allo stesso modo: il controllo dei limiti
 # sta in `imposta_preferenza`, che è anche lo strumento usato dall'assistente.
 # L'altezza serve al BMI nella pagina del peso e vale sempre; i target
-# giornalieri disegnano le linee di riferimento nella sezione Salute.
+# giornalieri disegnano le fasce di riferimento nella sezione Nutrizione,
+# allargati da target_tolleranza_pct.
 CHIAVI_NUMERICHE = (
     "timer_default_sec",
     "analisi_n_sessioni",
@@ -31,6 +32,7 @@ CHIAVI_NUMERICHE = (
     "target_carboidrati_g",
     "target_grassi_g",
     "target_sonno_minuti",
+    "target_tolleranza_pct",
 )
 
 
