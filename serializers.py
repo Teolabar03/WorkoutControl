@@ -41,6 +41,23 @@ def serialize_esercizio_scheda(v):
     }
 
 
+def serialize_esercizio_sessione(v):
+    return {
+        "id": v.id,
+        "sessione_id": v.sessione_id,
+        "esercizio_scheda_id": v.esercizio_scheda_id,
+        "ordine": v.ordine,
+        "serie_target": v.serie_target,
+        "rep_target": v.rep_target,
+        "durata_target_sec": v.durata_target_sec,
+        "peso_suggerito_kg": v.peso_suggerito_kg,
+        "note": v.note,
+        "timer_recupero_secondi": v.timer_recupero_secondi,
+        "timer_effettivo": v.timer_effettivo,
+        "esercizio": serialize_esercizio_libreria(v.esercizio),
+    }
+
+
 def serialize_scheda(s, con_esercizi=True):
     dati = {
         "id": s.id,

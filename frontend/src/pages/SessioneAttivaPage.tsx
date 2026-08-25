@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import {
   Dialog,
   DialogContent,
@@ -14,10 +16,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { ExerciseBlock } from "@/components/sessione/ExerciseBlock"
 import { RestTimer } from "@/components/sessione/RestTimer"
-import { useDettaglioSessione, useTerminaSessione } from "@/hooks/useSessioneAttiva"
+import { AggiungiEsercizioForm } from "@/components/schede/AggiungiEsercizioForm"
+import {
+  useAggiungiEsercizioSessione,
+  useDettaglioSessione,
+  useRiordinaEserciziSessione,
+  useTerminaSessione,
+} from "@/hooks/useSessioneAttiva"
 import { useEliminaSessione } from "@/hooks/useSessioni"
 import { useRestTimer } from "@/hooks/useRestTimer"
 import { useStopwatch } from "@/hooks/useStopwatch"
+import type { BloccoAttivo } from "@/api/sessioni"
 
 export function SessioneAttivaPage() {
   const { sessioneId } = useParams<{ sessioneId: string }>()
@@ -28,6 +37,11 @@ export function SessioneAttivaPage() {
   const timer = useRestTimer(id)
   const termina = useTerminaSessione(id)
   const elimina = useEliminaSessione()
+  const aggiungiEsercizio = useAggiungiEsercizioSessione(id)
+  const riordina = useRiordinaEserciziSessione(id)
+
+  const [ordineOttimistico, setOrdineOttimistico] = useState<BloccoAttivo[] | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   const [dialogoAperto, setDialogoAperto] = useState(false)
   const [durata, setDurata] = useState("")
@@ -41,6 +55,23 @@ export function SessioneAttivaPage() {
 
   if (!data) return null
   const { sessione, blocchi } = data
+  const blocchiVisibili = ordineOttimistico ?? blocchi
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const indiceAttivo = blocchi.findIndex((b) => b.voce.id === active.id)
+    const indiceSopra = blocchi.findIndex((b) => b.voce.id === over.id)
+    if (indiceAttivo < 0 || indiceSopra < 0) return
+    const nuovoOrdine = arrayMove(blocchi, indiceAttivo, indiceSopra)
+
+    setOrdineOttimistico(nuovoOrdine)
+    riordina.mutate(
+      nuovoOrdine.map((b) => b.voce.id),
+      { onSettled: () => setOrdineOttimistico(null) }
+    )
+  }
 
   function handleTermina(e: FormEvent) {
     e.preventDefault()
@@ -83,22 +114,36 @@ export function SessioneAttivaPage() {
         </div>
       </div>
 
-      {blocchi.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Questo è un allenamento libero: non ha una scheda con esercizi predefiniti.
+      {blocchiVisibili.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {sessione.scheda_id
+            ? "Nessun esercizio in questo allenamento."
+            : "Questo è un allenamento libero: aggiungi un esercizio qui sotto per iniziare."}
         </p>
       ) : (
-        <div className="space-y-4">
-          {blocchi.map((blocco) => (
-            <ExerciseBlock
-              key={blocco.voce.id}
-              sessioneId={id}
-              blocco={blocco}
-              onSerieRegistrata={(timerSecondi) => timer.avvia(timerSecondi)}
-            />
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={blocchiVisibili.map((b) => b.voce.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-4">
+              {blocchiVisibili.map((blocco) => (
+                <ExerciseBlock
+                  key={blocco.voce.id}
+                  sessioneId={id}
+                  blocco={blocco}
+                  onSerieRegistrata={(timerSecondi) => timer.avvia(timerSecondi)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
+
+      <div className="rounded-lg border border-dashed border-border p-3">
+        <AggiungiEsercizioForm
+          esclusi={new Set(blocchi.map((b) => b.voce.esercizio.id))}
+          inCorso={aggiungiEsercizio.isPending}
+          onAggiungi={(dati) => aggiungiEsercizio.mutate(dati)}
+        />
+      </div>
 
       <RestTimer
         visibile={timer.visibile}

@@ -1,10 +1,18 @@
 import { useState } from "react"
-import { Play, Square, Trophy, X } from "lucide-react"
+import { useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { GripVertical, Play, RotateCcw, Square, Trash2, Trophy, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { numeroIt, parseNumeroIt, tempoMmss } from "@/lib/format"
-import { useEliminaSerieAttiva, useRegistraSerie } from "@/hooks/useSessioneAttiva"
+import {
+  useAnnullaSaltaEsercizioSessione,
+  useEliminaSerieAttiva,
+  useRegistraSerie,
+  useRimuoviEsercizioSessione,
+  useSaltaEsercizioSessione,
+} from "@/hooks/useSessioneAttiva"
 import { useCountUpTimer } from "@/hooks/useCountUpTimer"
 import type { BloccoAttivo } from "@/api/sessioni"
 
@@ -20,8 +28,15 @@ export function ExerciseBlock({
   const { voce } = blocco
   const esercizio = voce.esercizio
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: voce.id,
+  })
+
   const registra = useRegistraSerie(sessioneId)
   const elimina = useEliminaSerieAttiva(sessioneId)
+  const rimuovi = useRimuoviEsercizioSessione(sessioneId)
+  const salta = useSaltaEsercizioSessione(sessioneId)
+  const annullaSalta = useAnnullaSaltaEsercizioSessione(sessioneId)
   const cronometro = useCountUpTimer()
 
   const [peso, setPeso] = useState(voce.peso_suggerito_kg ? numeroIt(voce.peso_suggerito_kg) : "")
@@ -33,12 +48,20 @@ export function ExerciseBlock({
 
   const fatte = blocco.serie.length
   const completo = fatte >= voce.serie_target
+  const pianificato = voce.esercizio_scheda_id !== null
+  const puoModificareEsercizio = fatte === 0
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
 
   function registraSerie() {
     setErrore(null)
     registra.mutate(
       {
-        esercizio_scheda_id: voce.id,
+        esercizio_sessione_id: voce.id,
         peso_kg: esercizio.usa_peso ? parseNumeroIt(peso) : null,
         ripetizioni: !esercizio.a_tempo ? parseNumeroIt(reps) : null,
         durata_secondi: esercizio.a_tempo ? parseNumeroIt(durata) : null,
@@ -77,24 +100,68 @@ export function ExerciseBlock({
 
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className={cn(
         "rounded-lg border bg-card p-4 transition-shadow",
-        completo ? "border-primary/50" : "border-border",
+        blocco.saltato ? "border-dashed border-muted-foreground/40 opacity-70" : completo ? "border-primary/50" : "border-border",
         festeggia && "ring-2 ring-accent motion-reduce:ring-0"
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-heading text-lg font-semibold">{esercizio.nome}</h3>
-          <p className="text-xs text-muted-foreground">
-            {fatte}/{voce.serie_target} serie
-            {blocco.record ? ` · record ${blocco.record}` : ""}
-          </p>
+        <div className="flex items-start gap-1.5">
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="mt-0.5 cursor-grab touch-none rounded p-1.5 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            aria-label={`Trascina per riordinare ${esercizio.nome}`}
+          >
+            <GripVertical className="size-4" />
+          </button>
+          <div>
+            <h3 className="font-heading text-lg font-semibold">{esercizio.nome}</h3>
+            <p className="text-xs text-muted-foreground">
+              {blocco.saltato ? "Saltato" : `${fatte}/${voce.serie_target} serie`}
+              {blocco.record ? ` · record ${blocco.record}` : ""}
+            </p>
+          </div>
         </div>
-        {completo && <Trophy className="size-5 shrink-0 text-primary" aria-hidden="true" />}
+        <div className="flex shrink-0 items-center gap-1">
+          {completo && !blocco.saltato && <Trophy className="size-5 text-primary" aria-hidden="true" />}
+          {blocco.saltato ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => annullaSalta.mutate(voce.id)}
+              aria-label={`Annulla il salto di ${esercizio.nome}`}
+            >
+              <RotateCcw className="size-4" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={!puoModificareEsercizio}
+              title={
+                puoModificareEsercizio
+                  ? undefined
+                  : "Cancella prima le serie registrate per questo esercizio."
+              }
+              onClick={() =>
+                pianificato ? salta.mutate(voce.id) : rimuovi.mutate(voce.id)
+              }
+              aria-label={pianificato ? `Salta ${esercizio.nome}` : `Rimuovi ${esercizio.nome}`}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {blocco.serie.length > 0 && (
+      {blocco.saltato ? null : blocco.serie.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5">
           {blocco.serie.map((s) => (
             <li
@@ -121,6 +188,7 @@ export function ExerciseBlock({
         </ul>
       )}
 
+      {!blocco.saltato && (
       <div className="mt-3 flex flex-wrap items-end gap-2">
         {esercizio.usa_peso && (
           <div className="w-20">
@@ -187,6 +255,7 @@ export function ExerciseBlock({
           Registra
         </Button>
       </div>
+      )}
 
       {errore && <p className="mt-2 text-sm text-destructive">{errore}</p>}
     </div>

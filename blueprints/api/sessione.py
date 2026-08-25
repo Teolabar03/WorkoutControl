@@ -10,8 +10,9 @@ from datetime import date, datetime
 from flask import Blueprint, request
 
 from models import (
+    EsercizioLibreria,
     EsercizioSaltato,
-    EsercizioScheda,
+    EsercizioSessione,
     Impostazione,
     NotaDolore,
     Scheda,
@@ -22,7 +23,7 @@ from models import (
 from schemas import ApiError, SessioneManualeSchema, api_ok
 from serializers import (
     serialize_esercizio_libreria,
-    serialize_esercizio_scheda,
+    serialize_esercizio_sessione,
     serialize_serie,
     serialize_sessione,
 )
@@ -47,25 +48,44 @@ def _sessione_o_404(sessione_id):
     return sessione
 
 
-def _blocchi_attivi(sessione):
-    """Un blocco per esercizio della scheda, con le serie già registrate e il
-    record attuale da battere — gli stessi dati che servivano a sessione.html.
-    """
-    if not sessione.scheda:
-        return []
+def _voce_sessione_o_404(voce_id):
+    voce = db.session.get(EsercizioSessione, voce_id)
+    if voce is None:
+        raise ApiError("NOT_FOUND", "Esercizio della sessione non trovato.", 404)
+    return voce
 
+
+def _serie_registrate(voce_sessione_id):
+    return (
+        db.session.query(SerieEseguita)
+        .filter_by(esercizio_sessione_id=voce_sessione_id)
+        .count()
+    )
+
+
+def _blocchi_attivi(sessione):
+    """Un blocco per esercizio della sessione, con le serie già registrate e
+    il record attuale da battere — gli stessi dati che servivano a
+    sessione.html, letti pero' dallo snapshot EsercizioSessione invece che
+    dalla scheda live: cosi' regge anche gli esercizi ad-hoc aggiunti durante
+    l'allenamento e l'ordine reale di registrazione, non solo quello statico
+    della scheda.
+    """
     timer_default = Impostazione.get_int("timer_default_sec", 90)
     gia_fatte = {}
     for serie in sessione.serie:
-        gia_fatte.setdefault(serie.esercizio_scheda_id, []).append(serie)
+        gia_fatte.setdefault(serie.esercizio_sessione_id, []).append(serie)
+    saltati = {
+        s.esercizio_scheda_id for s in sessione.esercizi_saltati if s.esercizio_scheda_id
+    }
 
     blocchi = []
-    for voce in sessione.scheda.esercizi:
+    for voce in sessione.esercizi:
         esercizio = voce.esercizio
         record = record_corrente(esercizio.id, tipo_pr(esercizio))
         blocchi.append(
             {
-                "voce": serialize_esercizio_scheda(voce),
+                "voce": serialize_esercizio_sessione(voce),
                 "serie": [
                     serialize_serie(s)
                     for s in sorted(
@@ -74,6 +94,7 @@ def _blocchi_attivi(sessione):
                 ],
                 "timer_secondi": voce.timer_recupero_secondi or timer_default,
                 "record": record.etichetta if record else None,
+                "saltato": voce.esercizio_scheda_id in saltati,
             }
         )
     return blocchi
@@ -101,6 +122,28 @@ def avvia_route():
         completata=False,
     )
     db.session.add(sessione)
+    db.session.flush()
+
+    # Snapshot degli esercizi della scheda al momento dell'avvio: la sessione
+    # ne tiene una copia propria (EsercizioSessione), cosi' aggiungere/togliere
+    # esercizi durante l'allenamento non tocca la scheda template, e
+    # modificarla dopo non altera retroattivamente questa sessione.
+    if scheda:
+        for voce in scheda.esercizi:
+            db.session.add(
+                EsercizioSessione(
+                    sessione_id=sessione.id,
+                    esercizio_libreria_id=voce.esercizio_libreria_id,
+                    esercizio_scheda_id=voce.id,
+                    ordine=voce.ordine,
+                    serie_target=voce.serie_target,
+                    rep_target=voce.rep_target,
+                    durata_target_sec=voce.durata_target_sec,
+                    peso_suggerito_kg=voce.peso_suggerito_kg,
+                    note=voce.note,
+                    timer_recupero_secondi=voce.timer_recupero_secondi,
+                )
+            )
     db.session.commit()
     return api_ok(serialize_sessione(sessione), status=201)
 
@@ -123,9 +166,9 @@ def registra_serie_route(sessione_id):
         raise ApiError("SESSIONE_NON_ATTIVA", "Sessione non attiva.", 404)
 
     dati = request.get_json(force=True, silent=True) or {}
-    voce_id = dati.get("esercizio_scheda_id")
-    voce = db.session.get(EsercizioScheda, voce_id) if voce_id else None
-    if voce is None:
+    voce_id = dati.get("esercizio_sessione_id")
+    voce = db.session.get(EsercizioSessione, voce_id) if voce_id else None
+    if voce is None or voce.sessione_id != sessione.id:
         raise ApiError("VALIDATION_ERROR", "Esercizio non valido.", 422)
 
     def numero(chiave, cast):
@@ -148,11 +191,12 @@ def registra_serie_route(sessione_id):
             422,
         )
 
-    gia_fatte = sum(1 for s in sessione.serie if s.esercizio_scheda_id == voce.id)
+    gia_fatte = sum(1 for s in sessione.serie if s.esercizio_sessione_id == voce.id)
 
     serie = SerieEseguita(
         sessione_id=sessione.id,
-        esercizio_scheda_id=voce.id,
+        esercizio_sessione_id=voce.id,
+        esercizio_scheda_id=voce.esercizio_scheda_id,
         esercizio_libreria_id=voce.esercizio_libreria_id,
         numero_serie=gia_fatte + 1,
         peso_kg=peso,
@@ -161,6 +205,15 @@ def registra_serie_route(sessione_id):
         note=(dati.get("note") or "").strip(),
     )
     db.session.add(serie)
+
+    # Se l'esercizio era stato segnato "saltato", registrare una serie vuol
+    # dire che l'utente ha cambiato idea: il salto va annullato, altrimenti
+    # resterebbe segnato come non svolto pur avendo delle serie.
+    if voce.esercizio_scheda_id is not None:
+        db.session.query(EsercizioSaltato).filter_by(
+            sessione_id=sessione.id, esercizio_scheda_id=voce.esercizio_scheda_id
+        ).delete(synchronize_session=False)
+
     # Il PR va valutato con la serie gia' collegata alla sessione, perche' usa
     # la data della sessione: flush prima del controllo.
     db.session.flush()
@@ -189,7 +242,7 @@ def elimina_serie_route(serie_id):
         raise ApiError("NOT_FOUND", "Serie non trovata.", 404)
 
     sessione_id = serie.sessione_id
-    voce_id = serie.esercizio_scheda_id
+    voce_id = serie.esercizio_sessione_id
     esercizio_id = serie.esercizio_libreria_id
     # Va letto prima della delete: dopo, l'oggetto e' detached e la relationship
     # non e' piu' raggiungibile.
@@ -200,7 +253,7 @@ def elimina_serie_route(serie_id):
 
     rimanenti = (
         db.session.query(SerieEseguita)
-        .filter_by(sessione_id=sessione_id, esercizio_scheda_id=voce_id)
+        .filter_by(sessione_id=sessione_id, esercizio_sessione_id=voce_id)
         .order_by(SerieEseguita.id.asc())
         .all()
     )
@@ -212,6 +265,132 @@ def elimina_serie_route(serie_id):
 
     record = record_corrente(esercizio_id, tipo)
     return api_ok({"record": record.etichetta if record else None})
+
+
+@bp.post("/sessioni/<int:sessione_id>/esercizi")
+def aggiungi_esercizio_sessione_route(sessione_id):
+    """Aggiunge un esercizio ad-hoc alla sessione attiva, senza toccare la scheda."""
+    sessione = db.session.get(Sessione, sessione_id)
+    if sessione is None or sessione.completata:
+        raise ApiError("SESSIONE_NON_ATTIVA", "Sessione non attiva.", 404)
+
+    corpo = request.get_json(force=True, silent=True) or {}
+    esercizio_id = corpo.get("esercizio_libreria_id")
+    esercizio = db.session.get(EsercizioLibreria, esercizio_id) if esercizio_id else None
+    if esercizio is None:
+        raise ApiError("VALIDATION_ERROR", "esercizio_libreria_id è obbligatorio.", 422)
+
+    ordine_max = max((v.ordine for v in sessione.esercizi), default=-1)
+    voce = EsercizioSessione(
+        sessione_id=sessione.id,
+        esercizio_libreria_id=esercizio.id,
+        esercizio_scheda_id=None,
+        ordine=ordine_max + 1,
+        serie_target=corpo.get("serie_target") or 4,
+        rep_target=corpo.get("rep_target"),
+        durata_target_sec=corpo.get("durata_target_sec"),
+        peso_suggerito_kg=corpo.get("peso_suggerito_kg"),
+        note=corpo.get("note", ""),
+        timer_recupero_secondi=corpo.get("timer_recupero_secondi"),
+    )
+    db.session.add(voce)
+    db.session.commit()
+    return api_ok(serialize_esercizio_sessione(voce), status=201)
+
+
+@bp.put("/sessioni/<int:sessione_id>/esercizi/ordine")
+def riordina_esercizi_sessione_route(sessione_id):
+    """Riordino bulk (drag&drop): body {"ordine": [esercizio_sessione_id, ...]}."""
+    sessione = _sessione_o_404(sessione_id)
+    corpo = request.get_json(force=True, silent=True) or {}
+    ordine_richiesto = corpo.get("ordine")
+    if not isinstance(ordine_richiesto, list):
+        raise ApiError("VALIDATION_ERROR", "ordine deve essere un elenco di id.", 422)
+
+    voci_per_id = {v.id: v for v in sessione.esercizi}
+    if set(ordine_richiesto) != set(voci_per_id):
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "ordine deve contenere esattamente gli id degli esercizi della sessione.",
+            422,
+        )
+
+    for indice, voce_id in enumerate(ordine_richiesto):
+        voci_per_id[voce_id].ordine = indice
+    db.session.commit()
+    return api_ok(_blocchi_attivi(sessione))
+
+
+@bp.delete("/esercizi-sessione/<int:voce_id>")
+def rimuovi_esercizio_sessione_route(voce_id):
+    """Cancella un esercizio ad-hoc dalla sessione attiva.
+
+    Un esercizio pianificato dalla scheda (esercizio_scheda_id valorizzato)
+    non si cancella mai da qui: si salta con l'endpoint /salta, cosi' la
+    sessione ne tiene comunque traccia per l'aderenza alla scheda.
+    """
+    voce = _voce_sessione_o_404(voce_id)
+    if voce.esercizio_scheda_id is not None:
+        raise ApiError(
+            "ESERCIZIO_PIANIFICATO",
+            "Questo esercizio è previsto dalla scheda: puoi solo saltarlo, non cancellarlo.",
+            422,
+        )
+    if _serie_registrate(voce.id) > 0:
+        raise ApiError(
+            "SERIE_PRESENTI",
+            "Cancella prima le serie registrate per questo esercizio.",
+            422,
+        )
+    db.session.delete(voce)
+    db.session.commit()
+    return "", 204
+
+
+@bp.post("/esercizi-sessione/<int:voce_id>/salta")
+def salta_esercizio_sessione_route(voce_id):
+    """Segna come saltato un esercizio pianificato dalla scheda."""
+    voce = _voce_sessione_o_404(voce_id)
+    if voce.esercizio_scheda_id is None:
+        raise ApiError(
+            "ESERCIZIO_AD_HOC",
+            "Questo esercizio non è previsto dalla scheda: puoi cancellarlo, non saltarlo.",
+            422,
+        )
+    if _serie_registrate(voce.id) > 0:
+        raise ApiError(
+            "SERIE_PRESENTI",
+            "Non puoi saltare un esercizio per cui hai già registrato delle serie.",
+            422,
+        )
+
+    esistente = (
+        db.session.query(EsercizioSaltato)
+        .filter_by(sessione_id=voce.sessione_id, esercizio_scheda_id=voce.esercizio_scheda_id)
+        .first()
+    )
+    if esistente is None:
+        db.session.add(
+            EsercizioSaltato(
+                sessione_id=voce.sessione_id,
+                esercizio_scheda_id=voce.esercizio_scheda_id,
+                esercizio_libreria_id=voce.esercizio_libreria_id,
+                motivo=(request.get_json(force=True, silent=True) or {}).get("motivo", ""),
+            )
+        )
+        db.session.commit()
+    return api_ok(_blocchi_attivi(voce.sessione))
+
+
+@bp.delete("/esercizi-sessione/<int:voce_id>/salta")
+def annulla_salta_esercizio_sessione_route(voce_id):
+    """Annulla il salto di un esercizio pianificato, senza dover riavviare."""
+    voce = _voce_sessione_o_404(voce_id)
+    db.session.query(EsercizioSaltato).filter_by(
+        sessione_id=voce.sessione_id, esercizio_scheda_id=voce.esercizio_scheda_id
+    ).delete(synchronize_session=False)
+    db.session.commit()
+    return api_ok(_blocchi_attivi(voce.sessione))
 
 
 @bp.post("/sessioni/<int:sessione_id>/termina")

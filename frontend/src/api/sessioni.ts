@@ -1,5 +1,32 @@
 import { api } from "@/lib/api"
-import type { EsercizioScheda, Serie } from "@/api/schede"
+import type { EsercizioLibreria, Serie } from "@/api/schede"
+
+/** Un esercizio della sessione attiva: snapshot indipendente dalla scheda. */
+export interface EsercizioSessione {
+  id: number
+  sessione_id: number
+  /** null = aggiunto ad-hoc durante l'allenamento, non pianificato dalla scheda. */
+  esercizio_scheda_id: number | null
+  ordine: number
+  serie_target: number
+  rep_target: number | null
+  durata_target_sec: number | null
+  peso_suggerito_kg: number | null
+  note: string
+  timer_recupero_secondi: number | null
+  timer_effettivo: number
+  esercizio: EsercizioLibreria
+}
+
+export interface NuovoEsercizioSessione {
+  esercizio_libreria_id: number
+  serie_target?: number
+  rep_target?: number | null
+  durata_target_sec?: number | null
+  peso_suggerito_kg?: number | null
+  note?: string
+  timer_recupero_secondi?: number | null
+}
 
 export interface Sessione {
   id: number
@@ -39,10 +66,11 @@ export interface ModificaSessione {
 }
 
 export interface BloccoAttivo {
-  voce: EsercizioScheda
+  voce: EsercizioSessione
   serie: Serie[]
   timer_secondi: number
   record: string | null
+  saltato: boolean
 }
 
 export interface DettaglioSessione {
@@ -51,7 +79,7 @@ export interface DettaglioSessione {
 }
 
 export interface NuovaSerie {
-  esercizio_scheda_id: number
+  esercizio_sessione_id: number
   peso_kg?: number | null
   ripetizioni?: number | null
   durata_secondi?: number | null
@@ -145,4 +173,13 @@ export const sessioniApi = {
   eliminaSerie: (serieId: number) => api.delete<{ record: string | null }>(`/serie/${serieId}`),
   termina: (id: number, dati: TerminaSessione) =>
     api.post<Sessione>(`/sessioni/${id}/termina`, dati),
+  aggiungiEsercizio: (sessioneId: number, dati: NuovoEsercizioSessione) =>
+    api.post<EsercizioSessione>(`/sessioni/${sessioneId}/esercizi`, dati),
+  riordinaEsercizi: (sessioneId: number, ordine: number[]) =>
+    api.put<BloccoAttivo[]>(`/sessioni/${sessioneId}/esercizi/ordine`, { ordine }),
+  rimuoviEsercizio: (voceId: number) => api.delete<void>(`/esercizi-sessione/${voceId}`),
+  saltaEsercizio: (voceId: number, motivo?: string) =>
+    api.post<BloccoAttivo[]>(`/esercizi-sessione/${voceId}/salta`, { motivo }),
+  annullaSalta: (voceId: number) =>
+    api.delete<BloccoAttivo[]>(`/esercizi-sessione/${voceId}/salta`),
 }

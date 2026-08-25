@@ -173,6 +173,51 @@ class EsercizioScheda(db.Model):
         return Impostazione.get_int("timer_default_sec", 90)
 
 
+class EsercizioSessione(db.Model):
+    """Un esercizio della sessione attiva, snapshot indipendente dalla scheda.
+
+    Copiato da EsercizioScheda all'avvio quando la sessione parte da una
+    scheda (uno snapshot, non una lettura live: modificare la scheda dopo non
+    altera retroattivamente una sessione in corso o gia' conclusa), oppure
+    creato ad-hoc durante l'allenamento con esercizio_scheda_id a NULL. E'
+    proprio questo campo a decidere la semantica di rimozione: un esercizio
+    pianificato si puo' solo saltare (EsercizioSaltato), uno ad-hoc si
+    cancella del tutto (e solo se non ha ancora serie registrate).
+    """
+
+    __tablename__ = "esercizio_sessione"
+
+    id = db.Column(db.Integer, primary_key=True)
+    sessione_id = db.Column(
+        db.Integer, db.ForeignKey("sessione.id", ondelete="CASCADE"), nullable=False
+    )
+    esercizio_libreria_id = db.Column(
+        db.Integer, db.ForeignKey("esercizio_libreria.id"), nullable=False
+    )
+    esercizio_scheda_id = db.Column(
+        db.Integer, db.ForeignKey("esercizio_scheda.id"), nullable=True
+    )
+    # Ordine reale con cui gli esercizi vengono registrati/trascinati in
+    # questa sessione: append-only sulle aggiunte, editabile con drag&drop.
+    ordine = db.Column(db.Integer, nullable=False, default=0)
+    serie_target = db.Column(db.Integer, nullable=False, default=4)
+    rep_target = db.Column(db.Integer, nullable=True)
+    durata_target_sec = db.Column(db.Integer, nullable=True)
+    peso_suggerito_kg = db.Column(db.Float, nullable=True)
+    note = db.Column(db.Text, nullable=False, default="")
+    timer_recupero_secondi = db.Column(db.Integer, nullable=True)
+
+    sessione = db.relationship("Sessione", back_populates="esercizi")
+    esercizio = db.relationship("EsercizioLibreria")
+    esercizio_scheda = db.relationship("EsercizioScheda")
+
+    @property
+    def timer_effettivo(self):
+        if self.timer_recupero_secondi:
+            return self.timer_recupero_secondi
+        return Impostazione.get_int("timer_default_sec", 90)
+
+
 class Sessione(db.Model):
     __tablename__ = "sessione"
 
@@ -188,6 +233,12 @@ class Sessione(db.Model):
     completata = db.Column(db.Boolean, nullable=False, default=False)
 
     scheda = db.relationship("Scheda", back_populates="sessioni")
+    esercizi = db.relationship(
+        "EsercizioSessione",
+        back_populates="sessione",
+        cascade="all, delete-orphan",
+        order_by="EsercizioSessione.ordine",
+    )
     serie = db.relationship(
         "SerieEseguita",
         back_populates="sessione",
@@ -222,6 +273,16 @@ class SerieEseguita(db.Model):
     esercizio_scheda_id = db.Column(
         db.Integer, db.ForeignKey("esercizio_scheda.id"), nullable=True
     )
+    # Collegamento alla voce della sessione attiva che ha prodotto questa
+    # serie: NULL per le serie storiche registrate prima di questa colonna, o
+    # per quelle create dal flusso manuale/modifica, che non passa da
+    # EsercizioSessione. E' la chiave di raggruppamento "per esercizio della
+    # sessione" (numero_serie, blocchi live) al posto di esercizio_scheda_id,
+    # che da solo non distinguerebbe piu' esercizi ad-hoc diversi (tutti con
+    # esercizio_scheda_id = NULL).
+    esercizio_sessione_id = db.Column(
+        db.Integer, db.ForeignKey("esercizio_sessione.id"), nullable=True, index=True
+    )
     esercizio_libreria_id = db.Column(
         db.Integer, db.ForeignKey("esercizio_libreria.id"), nullable=False, index=True
     )
@@ -237,6 +298,7 @@ class SerieEseguita(db.Model):
     sessione = db.relationship("Sessione", back_populates="serie")
     esercizio = db.relationship("EsercizioLibreria")
     esercizio_scheda = db.relationship("EsercizioScheda")
+    esercizio_sessione = db.relationship("EsercizioSessione")
 
     @property
     def volume_kg(self):
