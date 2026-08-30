@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+// Versione passata dalla CI (-PversionCode=... -PversionName=...). Deve
+// crescere a ogni pubblicazione, altrimenti Android rifiuta di installare
+// l'APK nuovo sopra quello vecchio. I default servono alle build locali.
+def appVersionCode = (project.findProperty('versionCode') ?: '1') as Integer
+def appVersionName = project.findProperty('versionName') ?: '1.0'
+
+// Keystore per la firma: senza, Android considererebbe ogni build un'app
+// diversa (i debug sono firmati con una chiave generata al volo, diversa a
+// ogni runner) e l'aggiornamento fallirebbe per firma non corrispondente.
+// Le build locali restano possibili senza: si ricade sulla firma di debug.
+def keystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+def hasKeystore = keystorePath != null && file(keystorePath).exists()
+
 android {
     namespace = "it.workoutcontrol.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +20,8 @@ android {
         applicationId "it.workoutcontrol.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +29,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasKeystore) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASS')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASS') ?: System.getenv('ANDROID_KEYSTORE_PASS')
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ import { useCambiaModelloOllama, useImpostazioni, useModificaImpostazioni } from
 import { useAppContext } from "@/hooks/useAppContext"
 import { SamsungHealthCard } from "@/components/impostazioni/SamsungHealthCard"
 import { ObiettiviCard } from "@/components/impostazioni/ObiettiviCard"
+import { VersioneAppCard } from "@/components/impostazioni/VersioneAppCard"
 
 export function ImpostazioniPage() {
   const { data: context } = useAppContext()
@@ -89,6 +90,8 @@ export function ImpostazioniPage() {
       <ObiettiviCard />
 
       <SamsungHealthCard />
+
+      <VersioneAppCard />
 
       {context?.ai_disponibile && catalogo && (
         <div className="space-y-4 rounded-lg border border-border bg-card p-4">

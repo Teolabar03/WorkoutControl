@@ -1,21 +1,29 @@
-# Compila l'APK di WorkoutControl (cartella mobile/).
+# Compila l'APK di WorkoutControl e pubblica l'aggiornamento per i dispositivi.
 #
-# L'APK contiene il frontend: il job builda prima frontend/dist e poi lo
-# impacchetta con `cap sync`. L'unica cosa che l'app cerca in rete e' l'API.
+# L'APK impacchetta il frontend, quindi senza questo ogni modifica alla UI
+# vorrebbe dire reinstallare l'app a mano. Il job produce due cose:
 #
-# Gira su GitHub e non in locale perche' la macchina di sviluppo non ha
-# l'Android SDK e monta una JDK piu' recente di quella che Gradle si aspetta:
-# qui l'ambiente e' fissato e riproducibile, e l'APK esce come artifact da
-# scaricare e installare via sideload.
+#   web-bundle.zip  il solo frontend. L'app lo scarica e lo applica al riavvio
+#                   successivo, in silenzio: copre tutte le modifiche normali.
+#   app-release.apk serve solo quando cambia la parte nativa (un plugin nuovo,
+#                   il manifest). Android non lascia installarlo senza un tap,
+#                   quindi l'app si limita a segnalarlo in Impostazioni.
 #
-# Nota: main NON e' fra i trigger. Un push su main fa partire il webhook che
-# aggiorna la VPS, e questo workflow non c'entra con quel deploy.
+# manifest.json lega le due cose e vive a un URL stabile:
+#   .../releases/latest/download/manifest.json
+#
+# Da main esce una release vera, che diventa "latest" e raggiunge i telefoni.
+# Da android-app esce una prerelease, che "latest" ignora: si prova senza
+# spingere niente sui dispositivi.
+#
+# Il push su main fa partire anche il webhook che aggiorna la VPS: un solo
+# gesto allinea webapp e app.
 
 name: APK Android
 
 on:
   push:
-    branches: [android-app]
+    branches: [main, android-app]
     paths:
       - "frontend/**"
       - "mobile/**"
@@ -27,10 +35,17 @@ on:
         required: false
         default: ""
 
+permissions:
+  contents: write
+
 env:
   # Da dentro l'APK i percorsi relativi punterebbero al telefono: l'API va
   # indirizzata per intero (vedi frontend/src/lib/api.ts).
   API_ORIGIN: ${{ inputs.api_origin || 'https://indirizzo-rimosso/workout' }}
+  # Deve crescere a ogni pubblicazione: e' cosi' che l'app riconosce un bundle
+  # nuovo, ed e' quello che Android pretende per installare un APK sopra un
+  # altro. run_number cresce da solo e non torna mai indietro.
+  VERSIONE: 1.0.${{ github.run_number }}
 
 jobs:
   build:
@@ -73,6 +88,12 @@ jobs:
             || { echo "::error::VITE_API_ORIGIN non e' finita nel bundle"; exit 1; }
           echo "L'app parlera' con $VITE_API_ORIGIN"
 
+      # Lo zip che l'app scarica per aggiornarsi: il contenuto di dist, con
+      # index.html in radice, che e' come il plugin si aspetta di trovarlo.
+      - name: Prepara il bundle web
+        working-directory: frontend/dist
+        run: zip -r -q "$GITHUB_WORKSPACE/web-bundle.zip" .
+
       - name: Dipendenze del guscio
         working-directory: mobile
         run: npm ci
@@ -86,16 +107,58 @@ jobs:
           test -f android/app/src/main/assets/public/index.html \
             || { echo "::error::il frontend non e' finito nell'APK"; exit 1; }
 
+      # Senza una firma stabile ogni build sarebbe un'app diversa per Android e
+      # l'aggiornamento verrebbe rifiutato per firma non corrispondente: le
+      # build di debug usano una chiave generata al volo, diversa a ogni runner.
+      - name: Ricostruisci il keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
       # Il repo si aggiorna da Windows, che non versiona il bit di esecuzione.
       - name: Build APK
         working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon assembleRelease \
+            -PversionCode=${{ github.run_number }} \
+            -PversionName=$VERSIONE
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/app-release.apk"
 
-      - name: Pubblica l'APK
+      - name: Scrivi il manifest
+        run: |
+          base="https://github.com/${{ github.repository }}/releases/download/v$VERSIONE"
+          cat > manifest.json <<JSON
+          {
+            "versione": "$VERSIONE",
+            "bundle_url": "$base/web-bundle.zip",
+            "apk_version_code": ${{ github.run_number }},
+            "apk_url": "$base/app-release.apk"
+          }
+          JSON
+          cat manifest.json
+
+      # Da main la release e' definitiva e diventa "latest", quella che i
+      # dispositivi interrogano. Dagli altri branch resta prerelease, quindi
+      # scaricabile a mano ma invisibile a "latest".
+      - name: Pubblica la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then FLAG=""; else FLAG="--prerelease"; fi
+          gh release create "v$VERSIONE" \
+            web-bundle.zip app-release.apk manifest.json \
+            --title "v$VERSIONE" \
+            --notes "Build automatica da ${{ github.ref_name }} (${{ github.sha }})." \
+            --target "${{ github.sha }}" \
+            $FLAG
+
+      # Comodo per scaricare l'APK dalla run senza passare dalle release.
+      - name: Allega l'APK alla run
         uses: actions/upload-artifact@v7
         with:
           name: workoutcontrol-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: app-release.apk
           if-no-files-found: error

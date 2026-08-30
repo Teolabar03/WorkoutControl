@@ -32,6 +32,17 @@ const config: CapacitorConfig = {
     CapacitorHttp: {
       enabled: true,
     },
+    CapacitorUpdater: {
+      // Il controllo lo facciamo noi (frontend/src/lib/aggiornamenti.ts): il
+      // bundle si scarica quando serve e si applica al riavvio successivo, mai
+      // ricaricando l'app addosso a chi la sta usando.
+      autoUpdate: false,
+      // Se un bundle nuovo non conferma di essere partito entro questo tempo,
+      // il plugin torna da solo al precedente. E' la sola protezione contro un
+      // aggiornamento che non si avvia: su un telefono non si rimedia a mano.
+      appReadyTimeout: 10000,
+      resetWhenUpdate: true,
+    },
   },
 }
 
