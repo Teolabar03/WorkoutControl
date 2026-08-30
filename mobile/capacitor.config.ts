@@ -42,6 +42,14 @@ const config: CapacitorConfig = {
       // aggiornamento che non si avvia: su un telefono non si rimedia a mano.
       appReadyTimeout: 10000,
       resetWhenUpdate: true,
+      // Spente entrambe perche' puntano ai server di Capgo, che qui non si
+      // usano: gli aggiornamenti arrivano dalle release GitHub e il controllo
+      // lo fa il frontend. Lasciandole ai valori predefiniti il plugin manda a
+      // un servizio terzo non solo gli eventi di aggiornamento ma anche crash,
+      // ANR, errori JavaScript e uscite per memoria esaurita — e riprova di
+      // continuo, riempiendo il log di "Failed to send stats batch".
+      statsUrl: "",
+      updateUrl: "",
     },
   },
 }
