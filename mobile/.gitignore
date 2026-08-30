@@ -1,0 +1,5 @@
+node_modules
+*.log
+
+# Il progetto Android e' versionato (android/), ma i file che `cap sync`
+# rigenera a ogni build no: li ignora gia' android/.gitignore.

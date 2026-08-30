@@ -1,0 +1,84 @@
+# Compila l'APK del guscio Android (cartella mobile/).
+#
+# Gira su GitHub e non in locale perche' la macchina di sviluppo non ha
+# l'Android SDK e monta una JDK piu' recente di quella che Gradle si aspetta:
+# qui l'ambiente e' fissato e riproducibile, e l'APK esce come artifact da
+# scaricare e installare via sideload.
+#
+# Nota: main NON e' fra i trigger. Un push su main fa partire il webhook che
+# aggiorna la VPS, e questo workflow non c'entra con quel deploy.
+
+name: APK Android
+
+on:
+  push:
+    branches: [android-app]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: "URL che l'app deve aprire (vuoto = la VPS). Per provare col dev server di casa: http://192.168.x.x:5173"
+        required: false
+        default: ""
+      cleartext:
+        description: "Consenti HTTP in chiaro (serve solo puntando al dev server)"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Node
+        uses: actions/setup-node@v7
+        with:
+          # La CLI di Capacitor 8 richiede Node >= 22.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Dipendenze
+        working-directory: mobile
+        run: npm ci
+
+      # Rigenera nel progetto Android i file che .gitignore tiene fuori dal
+      # repo perche' derivati: capacitor.config.json (dove finisce l'URL del
+      # server), l'elenco dei plugin e la copia degli asset web.
+      - name: Sync Capacitor
+        working-directory: mobile
+        env:
+          CAP_SERVER_URL: ${{ inputs.server_url }}
+          CAP_CLEARTEXT: ${{ inputs.cleartext && '1' || '0' }}
+        run: |
+          npx cap sync android
+          echo "--- configurazione applicata ---"
+          cat android/app/src/main/assets/capacitor.config.json
+
+      # Il repo si aggiorna da Windows, che non versiona il bit di esecuzione.
+      - name: Build APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Pubblica l'APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: workoutcontrol-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

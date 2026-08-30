@@ -1,0 +1,19 @@
+{
+  "name": "workoutcontrol-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Guscio Android per WorkoutControl: apre la webapp servita dalla VPS aggiungendoci le notifiche di sistema.",
+  "scripts": {
+    "sync": "cap sync android",
+    "apk": "cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.0",
+    "@capacitor/core": "8.5.0",
+    "@capacitor/local-notifications": "8.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.0",
+    "typescript": "~6.0.2"
+  }
+}
