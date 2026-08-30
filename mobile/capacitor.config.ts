@@ -1,39 +1,37 @@
 import type { CapacitorConfig } from "@capacitor/cli"
 
-// L'APK non contiene il frontend: e' un guscio che apre in WebView la stessa
-// webapp servita dalla VPS, con in piu' il bridge nativo (vedi
-// frontend/src/lib/notifiche.ts). Cosi' il frontend resta uno solo, il login
-// funziona come da browser perche' l'origin e' identica, e un push su main
-// aggiorna anche l'app senza ricompilare niente.
+// L'APK contiene il frontend: la build di Vite (frontend/dist) finisce dentro
+// l'app e la WebView la serve da https://localhost, senza rete. Solo le
+// chiamate API escono verso la VPS.
 //
-// Il rovescio, dichiarato: la doc Capacitor sconsiglia server.url in
-// produzione, perche' carica codice remoto in una WebView che ha accesso ai
-// plugin nativi. Qui il perimetro e' minimo — app personale sideloadata, non
-// su Play, origin e' la propria VPS in HTTPS con certificato valido, e l'unico
-// plugin concesso sono le notifiche locali.
+// Questo pero' sposta l'app su un'origin diversa da quella del server, e il
+// login e' a cookie di sessione: da https://localhost il cookie di
+// indirizzo-rimosso e' di terza parte, e le WebView moderne li bloccano sempre di
+// piu'. Da qui CapacitorHttp, che fa uscire fetch e XMLHttpRequest dal motore
+// nativo invece che dalla WebView: niente origin, quindi niente CORS da
+// aprire e niente SameSite da allentare, e i cookie li tiene il gestore
+// nativo. Il backend resta identico a com'e' per il web.
 //
-// CAP_SERVER_URL serve a puntare l'APK altrove senza toccare il file: in fase
-// di prova si punta al dev server di Vite sulla rete di casa
-// (CAP_SERVER_URL=http://192.168.x.x:5173), che essendo in chiaro richiede
-// anche CAP_CLEARTEXT=1.
-const url = process.env.CAP_SERVER_URL || "https://indirizzo-rimosso/workout/"
-const cleartext = process.env.CAP_CLEARTEXT === "1"
+// Il rovescio noto: passando dal motore nativo, l'upload multipart
+// (l'import dell'export Samsung Health, in Impostazioni) puo' non funzionare.
+// E' un'operazione una tantum che si fa comodamente da browser, quindi non
+// vale la pena complicare il client API per coprirla anche qui.
 
 const config: CapacitorConfig = {
   appId: "it.workoutcontrol.app",
   appName: "WorkoutControl",
-  // Richiesto dalla CLI ma inutilizzato: con server.url la WebView non carica
-  // mai i file locali. Contiene solo una pagina di cortesia, che si vede
-  // unicamente se il server non risponde.
-  webDir: "www",
+  // La build del frontend, prodotta con VITE_API_ORIGIN valorizzata perche'
+  // qui i percorsi relativi punterebbero dentro il telefono.
+  webDir: "../frontend/dist",
   android: {
     // La webapp e' dark-native (index.html ha class="dark"): senza questo lo
     // sfondo bianco di default della WebView lampeggia a ogni avvio.
     backgroundColor: "#121212",
   },
-  server: {
-    url,
-    cleartext,
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
 }
 

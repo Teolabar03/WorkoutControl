@@ -1,4 +1,7 @@
-# Compila l'APK del guscio Android (cartella mobile/).
+# Compila l'APK di WorkoutControl (cartella mobile/).
+#
+# L'APK contiene il frontend: il job builda prima frontend/dist e poi lo
+# impacchetta con `cap sync`. L'unica cosa che l'app cerca in rete e' l'API.
 #
 # Gira su GitHub e non in locale perche' la macchina di sviluppo non ha
 # l'Android SDK e monta una JDK piu' recente di quella che Gradle si aspetta:
@@ -14,19 +17,20 @@ on:
   push:
     branches: [android-app]
     paths:
+      - "frontend/**"
       - "mobile/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
     inputs:
-      server_url:
-        description: "URL che l'app deve aprire (vuoto = la VPS). Per provare col dev server di casa: http://192.168.x.x:5173"
+      api_origin:
+        description: "Server a cui l'app parla, senza /api finale (vuoto = la VPS). Deve essere https, altrimenti Android blocca il traffico in chiaro."
         required: false
         default: ""
-      cleartext:
-        description: "Consenti HTTP in chiaro (serve solo puntando al dev server)"
-        type: boolean
-        required: false
-        default: false
+
+env:
+  # Da dentro l'APK i percorsi relativi punterebbero al telefono: l'API va
+  # indirizzata per intero (vedi frontend/src/lib/api.ts).
+  API_ORIGIN: ${{ inputs.api_origin || 'https://indirizzo-rimosso/workout' }}
 
 jobs:
   build:
@@ -41,7 +45,9 @@ jobs:
           # La CLI di Capacitor 8 richiede Node >= 22.
           node-version: "22"
           cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            mobile/package-lock.json
 
       - name: JDK
         uses: actions/setup-java@v6
@@ -52,22 +58,33 @@ jobs:
       - name: Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Dipendenze
+      - name: Build del frontend
+        working-directory: frontend
+        env:
+          VITE_API_ORIGIN: ${{ env.API_ORIGIN }}
+        run: |
+          npm ci
+          npm run build
+          # L'origin viene inlineata dal bundler e "/api" si concatena a
+          # runtime: si cerca quindi l'origin, non l'URL intero. Senza questo
+          # controllo una variabile scritta male darebbe un APK che si installa
+          # e poi non parla con niente.
+          grep -q "$VITE_API_ORIGIN" dist/assets/*.js \
+            || { echo "::error::VITE_API_ORIGIN non e' finita nel bundle"; exit 1; }
+          echo "L'app parlera' con $VITE_API_ORIGIN"
+
+      - name: Dipendenze del guscio
         working-directory: mobile
         run: npm ci
 
-      # Rigenera nel progetto Android i file che .gitignore tiene fuori dal
-      # repo perche' derivati: capacitor.config.json (dove finisce l'URL del
-      # server), l'elenco dei plugin e la copia degli asset web.
+      # Copia frontend/dist dentro il progetto Android e rigenera i file che
+      # .gitignore tiene fuori dal repo perche' derivati (config e plugin).
       - name: Sync Capacitor
         working-directory: mobile
-        env:
-          CAP_SERVER_URL: ${{ inputs.server_url }}
-          CAP_CLEARTEXT: ${{ inputs.cleartext && '1' || '0' }}
         run: |
           npx cap sync android
-          echo "--- configurazione applicata ---"
-          cat android/app/src/main/assets/capacitor.config.json
+          test -f android/app/src/main/assets/public/index.html \
+            || { echo "::error::il frontend non e' finito nell'APK"; exit 1; }
 
       # Il repo si aggiorna da Windows, che non versiona il bit di esecuzione.
       - name: Build APK

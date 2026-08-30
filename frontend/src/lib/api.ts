@@ -16,7 +16,13 @@ type ErrorEnvelope = { error: { code: string; message: string; fields?: unknown 
 
 // Prefisso di deploy (vedi `base` in vite.config.ts): '/' in locale, '/workout/'
 // sulla VPS dietro nginx. Termina sempre con '/', quindi niente slash extra qui.
-const API_BASE = `${import.meta.env.BASE_URL}api`
+//
+// Nell'APK invece il frontend e' impacchettato e la WebView lo serve da
+// https://localhost: un percorso relativo cercherebbe l'API dentro il telefono.
+// VITE_API_ORIGIN, valorizzata solo nella build dell'app, la indirizza per
+// intero al server. Restando vuota altrove, web e VPS non cambiano di una riga.
+const ORIGIN_API = (import.meta.env.VITE_API_ORIGIN ?? "").replace(/\/+$/, "")
+const API_BASE = ORIGIN_API ? `${ORIGIN_API}/api` : `${import.meta.env.BASE_URL}api`
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Con FormData il Content-Type lo deve scrivere il browser: include il
