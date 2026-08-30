@@ -135,6 +135,20 @@ jobs:
             -PversionName=$VERSIONE
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/app-release.apk"
 
+      # Se la firma cambiasse, gli APK gia' installati non si aggiornerebbero
+      # piu' e ce ne accorgeremmo solo dal telefono, con un "app non
+      # installata" senza spiegazioni. L'impronta attesa e' quella del keystore
+      # generato una volta sola: qui si controlla che sia ancora quella.
+      - name: Verifica la firma
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app-release.apk | tee firma.txt
+          # apksigner stampa l'impronta senza due punti e in minuscolo, keytool
+          # con i due punti: si normalizza prima di confrontare.
+          tr -d ':' < firma.txt | tr 'A-Z' 'a-z' \
+            | grep -q "6023e853e38bff6a14bba344a545f49310c72ce6478858d5611450e11d057260" \
+            || { echo "::error::l'APK non e' firmato con il keystore atteso: gli aggiornamenti verrebbero rifiutati"; exit 1; }
+
       - name: Scrivi il manifest
         run: |
           base="https://github.com/${{ github.repository }}/releases/download/v$VERSIONE"
