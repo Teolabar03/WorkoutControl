@@ -46,3 +46,8 @@ export function oraIt(iso: string | null | undefined): string {
   if (!iso) return ""
   return iso.slice(11, 16)
 }
+
+/** "7h 25" da 445 minuti: una durata di sonno si legge in ore, non in minuti. */
+export function oreEMinuti(minuti: number): string {
+  return `${Math.floor(minuti / 60)}h ${String(Math.round(minuti % 60)).padStart(2, "0")}`
+}

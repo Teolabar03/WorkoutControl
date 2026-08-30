@@ -1,4 +1,4 @@
-import { Bar, BarChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 interface GiornoMacro {
   label: string
@@ -13,7 +13,18 @@ interface GiornoMacro {
  * giornata", non "quanti grammi di grassi in assoluto": l'altezza totale dà il
  * colpo d'occhio sulla quantità, le fasce sulla proporzione.
  */
-export function MacroChart({ dati }: { dati: GiornoMacro[] }) {
+export function MacroChart({
+  dati,
+  indiceInCorso,
+}: {
+  dati: GiornoMacro[]
+  /** La colonna di un giorno ancora in corso, scaricata come nelle altre barre
+   *  dell'app: a metà giornata la pila è bassa perché manca la cena, non perché
+   *  si è mangiato poco. */
+  indiceInCorso?: number
+}) {
+  const opacita = (i: number) => (i === indiceInCorso ? 0.35 : 1)
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={dati} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -41,8 +52,16 @@ export function MacroChart({ dati }: { dati: GiornoMacro[] }) {
           formatter={(valore, nome) => [`${valore} g`, nome]}
         />
         <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
-        <Bar dataKey="proteine" stackId="macro" name="Proteine" fill="var(--color-primary)" maxBarSize={40} />
-        <Bar dataKey="carboidrati" stackId="macro" name="Carboidrati" fill="var(--color-accent)" maxBarSize={40} />
+        <Bar dataKey="proteine" stackId="macro" name="Proteine" fill="var(--color-primary)" maxBarSize={40}>
+          {dati.map((_, i) => (
+            <Cell key={i} fillOpacity={opacita(i)} />
+          ))}
+        </Bar>
+        <Bar dataKey="carboidrati" stackId="macro" name="Carboidrati" fill="var(--color-accent)" maxBarSize={40}>
+          {dati.map((_, i) => (
+            <Cell key={i} fillOpacity={opacita(i)} />
+          ))}
+        </Bar>
         <Bar
           dataKey="grassi"
           stackId="macro"
@@ -50,7 +69,11 @@ export function MacroChart({ dati }: { dati: GiornoMacro[] }) {
           fill="var(--color-muted-foreground)"
           radius={[4, 4, 0, 0]}
           maxBarSize={40}
-        />
+        >
+          {dati.map((_, i) => (
+            <Cell key={i} fillOpacity={opacita(i)} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )

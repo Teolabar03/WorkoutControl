@@ -1,3 +1,4 @@
+import { PastigliaInCorso } from "@/components/common/PastigliaInCorso"
 import { cn } from "@/lib/utils"
 import { dataIt, numeroIt, oraIt } from "@/lib/format"
 import {
@@ -18,22 +19,28 @@ export function GiornoPasti({
   data,
   pasti,
   rangeKcal,
+  inCorso,
 }: {
   data: string
   pasti: Pasto[]
   rangeKcal: RangeObiettivo | null
+  /** Il giorno corrente: al posto del giudizio sull'obiettivo va un promemoria
+   *  che la giornata non è finita. Marcare "Sotto" una giornata alle undici del
+   *  mattino è vero e inutile insieme — manca ancora quasi tutto da mangiare. */
+  inCorso?: boolean
 }) {
   const totale = (campo: keyof Pasto) =>
     pasti.reduce((somma, p) => somma + ((p[campo] as number | null) ?? 0), 0)
 
   const kcal = totale("kcal")
-  const stato = rangeKcal ? statoObiettivo(kcal, rangeKcal) : null
+  const stato = rangeKcal && !inCorso ? statoObiettivo(kcal, rangeKcal) : null
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="font-heading text-base font-semibold">{dataIt(data)}</h3>
         <div className="flex items-baseline gap-2">
+          {inCorso && <PastigliaInCorso />}
           {stato && (
             <span className={cn("text-xs font-medium", TESTO_STATO[stato])}>
               {ETICHETTA_STATO[stato]}

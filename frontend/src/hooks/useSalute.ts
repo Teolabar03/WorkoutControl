@@ -2,38 +2,31 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { saluteApi } from "@/api/salute"
 import { ApiError } from "@/lib/api"
+import { periodoValido, type Periodo } from "@/lib/periodo"
 
-/** Intervallo che finisce oggi, in date ISO, come lo vuole l'API. */
-function intervallo(giorni: number) {
-  const al = new Date()
-  const dal = new Date()
-  dal.setDate(dal.getDate() - (giorni - 1))
-  return { dal: dal.toISOString().slice(0, 10), al: al.toISOString().slice(0, 10) }
-}
-
-export function useSalute(giorni: number) {
-  const { dal, al } = intervallo(giorni)
+export function useSalute(periodo: Periodo) {
   return useQuery({
-    queryKey: ["salute", dal, al],
-    queryFn: () => saluteApi.giorni(dal, al),
+    queryKey: ["salute", periodo.dal, periodo.al],
+    queryFn: () => saluteApi.giorni(periodo.dal, periodo.al),
+    enabled: periodoValido(periodo),
   })
 }
 
 /** Le metriche generiche del periodo. L'array è già filtrato dal server: ci
  *  sono solo i tipi che hanno davvero dei valori. */
-export function useMetricheSalute(giorni: number) {
-  const { dal, al } = intervallo(giorni)
+export function useMetricheSalute(periodo: Periodo) {
   return useQuery({
-    queryKey: ["salute", "metriche", dal, al],
-    queryFn: () => saluteApi.metriche(dal, al),
+    queryKey: ["salute", "metriche", periodo.dal, periodo.al],
+    queryFn: () => saluteApi.metriche(periodo.dal, periodo.al),
+    enabled: periodoValido(periodo),
   })
 }
 
-export function usePasti(giorni: number) {
-  const { dal, al } = intervallo(giorni)
+export function usePasti(periodo: Periodo) {
   return useQuery({
-    queryKey: ["salute", "pasti", dal, al],
-    queryFn: () => saluteApi.pasti(dal, al),
+    queryKey: ["salute", "pasti", periodo.dal, periodo.al],
+    queryFn: () => saluteApi.pasti(periodo.dal, periodo.al),
+    enabled: periodoValido(periodo),
   })
 }
 

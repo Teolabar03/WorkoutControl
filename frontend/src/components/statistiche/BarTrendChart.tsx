@@ -19,6 +19,7 @@ export function BarTrendChart({
   target,
   targetMin,
   targetMax,
+  indiceInCorso,
 }: {
   labels: string[]
   valori: number[]
@@ -33,9 +34,16 @@ export function BarTrendChart({
    *  cosa. Senza, il componente si comporta esattamente come prima. */
   targetMin?: number
   targetMax?: number
+  /** Indice della barra che rappresenta un giorno non ancora finito: si disegna
+   *  scarica e tratteggiata. Il dato c'è ed è vero, ma è parziale, e una barra
+   *  piena come le altre farebbe leggere come un crollo quello che è solo un
+   *  pomeriggio non ancora passato. */
+  indiceInCorso?: number
 }) {
   const dati = labels.map((label, i) => ({ label, valore: valori[i] }))
   const conFascia = !!targetMin && !!targetMax && targetMax > targetMin
+  // Le Cell servono se almeno una barra va trattata diversamente dalle altre.
+  const perBarra = !!coloreBarra || indiceInCorso !== undefined
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -82,8 +90,20 @@ export function BarTrendChart({
           />
         )}
         <Bar dataKey="valore" radius={[4, 4, 0, 0]} maxBarSize={40} fill="var(--color-primary)">
-          {coloreBarra &&
-            dati.map((d, i) => <Cell key={i} fill={coloreBarra(d.valore)} />)}
+          {perBarra &&
+            dati.map((d, i) => {
+              const riempimento = coloreBarra ? coloreBarra(d.valore) : "var(--color-primary)"
+              const inCorso = i === indiceInCorso
+              return (
+                <Cell
+                  key={i}
+                  fill={riempimento}
+                  fillOpacity={inCorso ? 0.35 : 1}
+                  stroke={inCorso ? riempimento : undefined}
+                  strokeDasharray={inCorso ? "3 3" : undefined}
+                />
+              )
+            })}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
