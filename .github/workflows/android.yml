@@ -111,7 +111,15 @@ jobs:
       # l'aggiornamento verrebbe rifiutato per firma non corrispondente: le
       # build di debug usano una chiave generata al volo, diversa a ogni runner.
       - name: Ricostruisci il keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
+        run: |
+          # `tr -d` toglie a capo e spazi: un secret caricato da Windows puo'
+          # portarsi dietro CR o un BOM, e base64 -d fallirebbe senza dire
+          # perche'. Il controllo sotto verifica che ne sia uscito un keystore
+          # vero, invece di lasciare che sia Gradle a fallire piu' avanti.
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.keystore"
+          keytool -list -keystore "$RUNNER_TEMP/release.keystore" \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASS }}" > /dev/null \
+            || { echo "::error::keystore o password non validi (controlla i secret ANDROID_*)"; exit 1; }
 
       # Il repo si aggiorna da Windows, che non versiona il bit di esecuzione.
       - name: Build APK
