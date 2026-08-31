@@ -42,11 +42,13 @@ env:
   # Da dentro l'APK i percorsi relativi punterebbero al telefono: l'API va
   # indirizzata per intero (vedi frontend/src/lib/api.ts).
   #
-  # L'indirizzo non sta scritto qui perche' il repo e' pubblico: vive nella
-  # variabile di repository API_ORIGIN (Settings > Secrets and variables >
-  # Actions > Variables), che vedono solo i collaboratori. L'input api_origin
-  # la scavalca per una singola build.
-  API_ORIGIN: ${{ inputs.api_origin || vars.API_ORIGIN }}
+  # L'indirizzo non sta scritto qui perche' il repo e' pubblico: vive nel
+  # secret API_ORIGIN. Deve essere un secret e non una variable: su un repo
+  # pubblico i log delle Actions li legge chiunque, e l'env viene stampato a
+  # ogni step — da variable l'indirizzo comparirebbe in chiaro una ventina di
+  # volte per build. Da secret esce come ***. L'input api_origin lo scavalca
+  # per una singola build, ma quello che ci scrivi finisce nei log.
+  API_ORIGIN: ${{ inputs.api_origin || secrets.API_ORIGIN }}
   # Deve crescere a ogni pubblicazione: e' cosi' che l'app riconosce un bundle
   # nuovo, ed e' quello che Android pretende per installare un APK sopra un
   # altro. run_number cresce da solo e non torna mai indietro.
@@ -63,7 +65,7 @@ jobs:
       - name: Controlla l'indirizzo del server
         run: |
           [ -n "$API_ORIGIN" ] || {
-            echo "::error::manca la variabile di repository API_ORIGIN (Settings > Secrets and variables > Actions > Variables)"
+            echo "::error::manca il secret API_ORIGIN (Settings > Secrets and variables > Actions > Secrets)"
             exit 1
           }
 
@@ -101,7 +103,9 @@ jobs:
           # e poi non parla con niente.
           grep -q "$VITE_API_ORIGIN" dist/assets/*.js \
             || { echo "::error::VITE_API_ORIGIN non e' finita nel bundle"; exit 1; }
-          echo "L'app parlera' con $VITE_API_ORIGIN"
+          # Non lo si stampa: e' un secret, uscirebbe come *** e basta. Che
+          # sia quello giusto lo dice il grep qui sopra.
+          echo "Origin API inlineata nel bundle"
 
       # Lo zip che l'app scarica per aggiornarsi: il contenuto di dist, con
       # index.html in radice, che e' come il plugin si aspetta di trovarlo.
