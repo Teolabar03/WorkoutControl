@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { NavLink } from "react-router-dom"
 import {
   BarChart3,
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { useLogout } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { versioniInstallate, type VersioniInstallate } from "@/lib/aggiornamenti"
 
 interface NavItem {
   to: string
@@ -59,7 +60,21 @@ export function TopBar({
 }) {
   const logout = useLogout()
   const [menuAperto, setMenuAperto] = useState(false)
+  const [versioni, setVersioni] = useState<VersioniInstallate | null>(null)
   const items = navItems(aiDisponibile, saluteCollegata, nutrizioneDisponibile)
+
+  // Solo dentro l'APK: da browser `versioniInstallate` restituisce null e il
+  // piede del menu non si disegna, perche' li' la versione non significa
+  // niente (la pagina e' sempre quella che il server ha appena servito).
+  useEffect(() => {
+    let vivo = true
+    void versioniInstallate().then((v) => {
+      if (vivo) setVersioni(v)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [])
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
@@ -161,6 +176,16 @@ export function TopBar({
               </NavLink>
             ))}
           </nav>
+
+          {versioni && (
+            <div className="mt-auto border-t border-border px-4 pt-3 pb-1 text-xs text-muted-foreground">
+              <p>App {versioni.app}</p>
+              {/* "di fabbrica" = il bundle dentro l'APK, mai aggiornato: e'
+                  il valore da cui si capisce che l'aggiornamento silenzioso
+                  non e' ancora passato. */}
+              <p>Web {versioni.web === "builtin" ? "di fabbrica" : versioni.web}</p>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </header>

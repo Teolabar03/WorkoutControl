@@ -94,6 +94,33 @@ export async function controllaAggiornamenti(): Promise<void> {
   }
 }
 
+export interface VersioniInstallate {
+  /** versionName dell'APK installato. */
+  app: string
+  /** Versione del bundle web in esecuzione ("builtin" se e' quello dell'APK). */
+  web: string
+}
+
+/** Cosa sta girando adesso, senza interrogare la rete.
+ *
+ *  Diversa da `statoApp`, che confronta con quanto e' stato pubblicato e per
+ *  farlo scarica il manifest: qui serve solo dire cosa c'e' installato, e la
+ *  chiama il menu a ogni apertura.
+ *
+ *  Le versioni sono due perche' l'app si aggiorna su due binari: il bundle web
+ *  da solo e in silenzio, l'APK solo con un tap. Vederle separate e' l'unico
+ *  modo per capire quale dei due e' rimasto indietro. */
+export async function versioniInstallate(): Promise<VersioniInstallate | null> {
+  if (!nativo()) return null
+
+  try {
+    const [attuale, info] = await Promise.all([CapacitorUpdater.current(), App.getInfo()])
+    return { app: info.version, web: attuale.bundle.version }
+  } catch {
+    return null
+  }
+}
+
 export interface StatoApp {
   /** Versione del bundle web in esecuzione ("builtin" se e' quella dell'APK). */
   versioneWeb: string
