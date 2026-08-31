@@ -29,26 +29,17 @@ on:
       - "mobile/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:
-    inputs:
-      api_origin:
-        description: "Server a cui l'app parla, senza /api finale (vuoto = la VPS). Deve essere https, altrimenti Android blocca il traffico in chiaro."
-        required: false
-        default: ""
 
 permissions:
   contents: write
 
 env:
-  # Da dentro l'APK i percorsi relativi punterebbero al telefono: l'API va
-  # indirizzata per intero (vedi frontend/src/lib/api.ts).
-  #
-  # L'indirizzo non sta scritto qui perche' il repo e' pubblico: vive nel
-  # secret API_ORIGIN. Deve essere un secret e non una variable: su un repo
-  # pubblico i log delle Actions li legge chiunque, e l'env viene stampato a
-  # ogni step — da variable l'indirizzo comparirebbe in chiaro una ventina di
-  # volte per build. Da secret esce come ***. L'input api_origin lo scavalca
-  # per una singola build, ma quello che ci scrivi finisce nei log.
-  API_ORIGIN: ${{ inputs.api_origin || secrets.API_ORIGIN }}
+  # Qui non c'e' nessun indirizzo di server, di proposito: l'app lo chiede
+  # all'utente al primo avvio e se lo tiene sul dispositivo (vedi
+  # frontend/src/lib/server.ts). Inlinearlo in fase di build significava
+  # tenerlo in un secret, e da li' finiva comunque nei log di queste Actions,
+  # che su un repo pubblico legge chiunque. Cosi' la build non lo conosce e
+  # lo stesso APK vale per qualunque installazione.
   # Deve crescere a ogni pubblicazione: e' cosi' che l'app riconosce un bundle
   # nuovo, ed e' quello che Android pretende per installare un APK sopra un
   # altro. run_number cresce da solo e non torna mai indietro.
@@ -59,16 +50,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Senza indirizzo la build finirebbe comunque, sfornando un APK che si
-      # installa e non parla con niente: meglio fermarsi al primo secondo che
-      # accorgersene dal telefono.
-      - name: Controlla l'indirizzo del server
-        run: |
-          [ -n "$API_ORIGIN" ] || {
-            echo "::error::manca il secret API_ORIGIN (Settings > Secrets and variables > Actions > Secrets)"
-            exit 1
-          }
-
       - uses: actions/checkout@v7
 
       - name: Node
@@ -92,20 +73,13 @@ jobs:
 
       - name: Build del frontend
         working-directory: frontend
-        env:
-          VITE_API_ORIGIN: ${{ env.API_ORIGIN }}
         run: |
           npm ci
           npm run build
-          # L'origin viene inlineata dal bundler e "/api" si concatena a
-          # runtime: si cerca quindi l'origin, non l'URL intero. Senza questo
-          # controllo una variabile scritta male darebbe un APK che si installa
-          # e poi non parla con niente.
-          grep -q "$VITE_API_ORIGIN" dist/assets/*.js \
-            || { echo "::error::VITE_API_ORIGIN non e' finita nel bundle"; exit 1; }
-          # Non lo si stampa: e' un secret, uscirebbe come *** e basta. Che
-          # sia quello giusto lo dice il grep qui sopra.
-          echo "Origin API inlineata nel bundle"
+          # La stessa build serve il web e finisce nell'APK: non c'e' niente
+          # da parametrizzare qui. Nell'APK l'indirizzo del server lo mette
+          # l'utente al primo avvio, da browser l'API sta sullo stesso host
+          # che ha servito la pagina.
 
       # Lo zip che l'app scarica per aggiornarsi: il contenuto di dist, con
       # index.html in radice, che e' come il plugin si aspetta di trovarlo.

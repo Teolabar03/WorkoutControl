@@ -19,6 +19,7 @@ import { useAppContext } from "@/hooks/useAppContext"
 import { SamsungHealthCard } from "@/components/impostazioni/SamsungHealthCard"
 import { ObiettiviCard } from "@/components/impostazioni/ObiettiviCard"
 import { VersioneAppCard } from "@/components/impostazioni/VersioneAppCard"
+import { ServerCard } from "@/components/impostazioni/ServerCard"
 
 export function ImpostazioniPage() {
   const { data: context } = useAppContext()
@@ -92,6 +93,8 @@ export function ImpostazioniPage() {
       <SamsungHealthCard />
 
       <VersioneAppCard />
+
+      <ServerCard />
 
       {context?.ai_disponibile && catalogo && (
         <div className="space-y-4 rounded-lg border border-border bg-card p-4">

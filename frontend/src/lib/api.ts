@@ -1,3 +1,5 @@
+import { leggiOrigin, nativo } from "@/lib/server"
+
 export class ApiError extends Error {
   code: string
   status: number
@@ -14,21 +16,32 @@ export class ApiError extends Error {
 type Envelope<T> = { data: T; meta?: unknown }
 type ErrorEnvelope = { error: { code: string; message: string; fields?: unknown } }
 
-// Prefisso di deploy (vedi `base` in vite.config.ts): '/' in locale, '/workout/'
-// sulla VPS dietro nginx. Termina sempre con '/', quindi niente slash extra qui.
+// Da browser: prefisso di deploy (vedi `base` in vite.config.ts), '/' in locale
+// e '/workout/' sulla VPS dietro nginx. Termina sempre con '/', quindi niente
+// slash extra qui.
 //
-// Nell'APK invece il frontend e' impacchettato e la WebView lo serve da
-// https://localhost: un percorso relativo cercherebbe l'API dentro il telefono.
-// VITE_API_ORIGIN, valorizzata solo nella build dell'app, la indirizza per
-// intero al server. Restando vuota altrove, web e VPS non cambiano di una riga.
-const ORIGIN_API = (import.meta.env.VITE_API_ORIGIN ?? "").replace(/\/+$/, "")
-const API_BASE = ORIGIN_API ? `${ORIGIN_API}/api` : `${import.meta.env.BASE_URL}api`
+// Nell'APK il frontend e' impacchettato e la WebView lo serve da
+// https://localhost, dove un percorso relativo cercherebbe l'API dentro il
+// telefono: li' l'indirizzo intero del server lo sceglie l'utente al primo
+// avvio (vedi lib/server.ts). Nel bundle non ne resta scritto nessuno.
+function apiBase(): string {
+  if (!nativo()) return `${import.meta.env.BASE_URL}api`
+
+  const origin = leggiOrigin()
+  if (!origin) {
+    // Non dovrebbe succedere: AuthGate mostra la configurazione prima di
+    // lasciar partire qualunque query. Se succede, meglio un errore parlante
+    // che una fetch verso https://localhost/api.
+    throw new ApiError("SERVER_NON_CONFIGURATO", "Server non ancora configurato.", 0)
+  }
+  return `${origin}/api`
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Con FormData il Content-Type lo deve scrivere il browser: include il
   // boundary del multipart, che noi non possiamo conoscere.
   const multipart = init?.body instanceof FormData
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     ...init,
     headers: {
       ...(multipart ? {} : { "Content-Type": "application/json" }),

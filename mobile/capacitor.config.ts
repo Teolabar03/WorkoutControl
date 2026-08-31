@@ -20,8 +20,9 @@ import type { CapacitorConfig } from "@capacitor/cli"
 const config: CapacitorConfig = {
   appId: "it.workoutcontrol.app",
   appName: "WorkoutControl",
-  // La build del frontend, prodotta con VITE_API_ORIGIN valorizzata perche'
-  // qui i percorsi relativi punterebbero dentro il telefono.
+  // La build del frontend, la stessa identica che gira sul web: qui i
+  // percorsi relativi punterebbero dentro il telefono, e l'indirizzo del
+  // server lo chiede l'app al primo avvio (frontend/src/lib/server.ts).
   webDir: "../frontend/dist",
   android: {
     // La webapp e' dark-native (index.html ha class="dark"): senza questo lo
