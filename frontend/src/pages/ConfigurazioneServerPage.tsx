@@ -76,7 +76,13 @@ export function ConfigurazioneServerPage({
             spellCheck={false}
             placeholder="https://esempio.it/workout"
             value={indirizzo}
-            onChange={(e) => setIndirizzo(e.target.value)}
+            // L'errore se ne va appena si mette mano al campo: lasciarlo li'
+            // mentre si corregge l'indirizzo fa sembrare che il tentativo
+            // nuovo sia gia' fallito.
+            onChange={(e) => {
+              setIndirizzo(e.target.value)
+              setErrore("")
+            }}
             aria-invalid={Boolean(errore)}
           />
           <p className="text-sm text-muted-foreground">
