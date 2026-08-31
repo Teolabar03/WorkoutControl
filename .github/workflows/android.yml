@@ -41,7 +41,12 @@ permissions:
 env:
   # Da dentro l'APK i percorsi relativi punterebbero al telefono: l'API va
   # indirizzata per intero (vedi frontend/src/lib/api.ts).
-  API_ORIGIN: ${{ inputs.api_origin || 'https://indirizzo-rimosso/workout' }}
+  #
+  # L'indirizzo non sta scritto qui perche' il repo e' pubblico: vive nella
+  # variabile di repository API_ORIGIN (Settings > Secrets and variables >
+  # Actions > Variables), che vedono solo i collaboratori. L'input api_origin
+  # la scavalca per una singola build.
+  API_ORIGIN: ${{ inputs.api_origin || vars.API_ORIGIN }}
   # Deve crescere a ogni pubblicazione: e' cosi' che l'app riconosce un bundle
   # nuovo, ed e' quello che Android pretende per installare un APK sopra un
   # altro. run_number cresce da solo e non torna mai indietro.
@@ -52,6 +57,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Senza indirizzo la build finirebbe comunque, sfornando un APK che si
+      # installa e non parla con niente: meglio fermarsi al primo secondo che
+      # accorgersene dal telefono.
+      - name: Controlla l'indirizzo del server
+        run: |
+          [ -n "$API_ORIGIN" ] || {
+            echo "::error::manca la variabile di repository API_ORIGIN (Settings > Secrets and variables > Actions > Variables)"
+            exit 1
+          }
+
       - uses: actions/checkout@v7
 
       - name: Node

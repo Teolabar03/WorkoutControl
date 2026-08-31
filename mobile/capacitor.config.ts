@@ -5,12 +5,12 @@ import type { CapacitorConfig } from "@capacitor/cli"
 // chiamate API escono verso la VPS.
 //
 // Questo pero' sposta l'app su un'origin diversa da quella del server, e il
-// login e' a cookie di sessione: da https://localhost il cookie di
-// indirizzo-rimosso e' di terza parte, e le WebView moderne li bloccano sempre di
-// piu'. Da qui CapacitorHttp, che fa uscire fetch e XMLHttpRequest dal motore
-// nativo invece che dalla WebView: niente origin, quindi niente CORS da
-// aprire e niente SameSite da allentare, e i cookie li tiene il gestore
-// nativo. Il backend resta identico a com'e' per il web.
+// login e' a cookie di sessione: da https://localhost il cookie del server e'
+// di terza parte, e le WebView moderne li bloccano sempre di piu'. Da qui
+// CapacitorHttp, che fa uscire fetch e XMLHttpRequest dal motore nativo
+// invece che dalla WebView: niente origin, quindi niente CORS da aprire e
+// niente SameSite da allentare, e i cookie li tiene il gestore nativo. Il
+// backend resta identico a com'e' per il web.
 //
 // Il rovescio noto: passando dal motore nativo, l'upload multipart
 // (l'import dell'export Samsung Health, in Impostazioni) puo' non funzionare.
