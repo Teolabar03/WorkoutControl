@@ -10,6 +10,7 @@ import { dataIt, numeroIt } from "@/lib/format"
 import { useGiorno } from "@/hooks/useCalendario"
 import { useEliminaSessione, useModificaSessione } from "@/hooks/useSessioni"
 import { useSchedeElenco } from "@/hooks/useSchede"
+import { usePermessi } from "@/hooks/useAuth"
 import type { Sessione } from "@/api/sessioni"
 
 function SchedaModificaRapida({ sessione }: { sessione: Sessione }) {
@@ -71,6 +72,7 @@ function SchedaModificaRapida({ sessione }: { sessione: Sessione }) {
 
 function SessioneCard({ sessione }: { sessione: Sessione }) {
   const elimina = useEliminaSessione()
+  const { puoScrivere } = usePermessi()
 
   const perEsercizio = new Map<string, typeof sessione.serie>()
   for (const serie of sessione.serie ?? []) {
@@ -91,16 +93,18 @@ function SessioneCard({ sessione }: { sessione: Sessione }) {
         </div>
         <div className="flex items-center gap-2">
           {!sessione.completata && <Badge variant="outline">In corso</Badge>}
-          <ConfirmDialog
-            trigger={
-              <Button variant="ghost" size="icon-sm" aria-label="Elimina sessione">
-                <Trash2 className="size-4" />
-              </Button>
-            }
-            titolo="Eliminare questo allenamento?"
-            descrizione="Tutte le serie registrate andranno perse. L'operazione non è reversibile."
-            onConferma={() => elimina.mutate(sessione.id)}
-          />
+          {puoScrivere && (
+            <ConfirmDialog
+              trigger={
+                <Button variant="ghost" size="icon-sm" aria-label="Elimina sessione">
+                  <Trash2 className="size-4" />
+                </Button>
+              }
+              titolo="Eliminare questo allenamento?"
+              descrizione="Tutte le serie registrate andranno perse. L'operazione non è reversibile."
+              onConferma={() => elimina.mutate(sessione.id)}
+            />
+          )}
         </div>
       </div>
 
@@ -134,7 +138,7 @@ function SessioneCard({ sessione }: { sessione: Sessione }) {
         </p>
       )}
 
-      {sessione.completata && (
+      {sessione.completata && puoScrivere && (
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
           <Link to={`/sessione/${sessione.id}/modifica`} className="text-primary hover:underline">
             Modifica serie
@@ -142,7 +146,7 @@ function SessioneCard({ sessione }: { sessione: Sessione }) {
         </div>
       )}
 
-      <SchedaModificaRapida sessione={sessione} />
+      {puoScrivere && <SchedaModificaRapida sessione={sessione} />}
     </div>
   )
 }
@@ -150,6 +154,7 @@ function SessioneCard({ sessione }: { sessione: Sessione }) {
 export function GiornoPage() {
   const { giorno } = useParams<{ giorno: string }>()
   const { data } = useGiorno(giorno ?? "")
+  const { puoScrivere } = usePermessi()
 
   if (!data) return null
 
@@ -157,9 +162,11 @@ export function GiornoPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-heading text-2xl font-semibold">{dataIt(data.data)}</h1>
-        <Button variant="outline" asChild>
-          <Link to={`/sessione/manuale?data=${data.data}`}>Inserisci allenamento</Link>
-        </Button>
+        {puoScrivere && (
+          <Button variant="outline" asChild>
+            <Link to={`/sessione/manuale?data=${data.data}`}>Inserisci allenamento</Link>
+          </Button>
+        )}
       </div>
 
       {data.sessioni.length === 0 ? (

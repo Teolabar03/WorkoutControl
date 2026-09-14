@@ -16,6 +16,7 @@ import {
   useScheda,
 } from "@/hooks/useSchede"
 import { useAvviaSessione } from "@/hooks/useSessioni"
+import { usePermessi } from "@/hooks/useAuth"
 import type { EsercizioScheda } from "@/api/schede"
 
 export function SchedaDettaglioPage() {
@@ -29,6 +30,7 @@ export function SchedaDettaglioPage() {
   const riordina = useRiordinaEsercizi(id)
   const modificaEsercizio = useModificaEsercizioScheda(id)
   const rimuovi = useRimuoviEsercizioScheda(id)
+  const { puoScrivere } = usePermessi()
 
   const [inModifica, setInModifica] = useState<EsercizioScheda | null>(null)
   const [ordineOttimistico, setOrdineOttimistico] = useState<EsercizioScheda[] | null>(null)
@@ -62,17 +64,24 @@ export function SchedaDettaglioPage() {
             <h1 className="font-heading text-2xl font-semibold">{scheda.nome}</h1>
             {!scheda.attiva && <Badge variant="outline">Archiviata</Badge>}
           </div>
-          {scheda.obiettivo && <Badge variant="secondary" className="mt-1">{scheda.obiettivo}</Badge>}
+          {(scheda.obiettivo || scheda.riscaldamento) && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {scheda.obiettivo && <Badge variant="secondary">{scheda.obiettivo}</Badge>}
+              {scheda.riscaldamento && <Badge variant="outline">Riscaldamento · niente PR</Badge>}
+            </div>
+          )}
           {scheda.descrizione && <p className="mt-2 max-w-prose text-sm text-muted-foreground">{scheda.descrizione}</p>}
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(`/schede/${id}/modifica`)}>
-            <Pencil className="size-4" /> Modifica
-          </Button>
-          <Button onClick={() => avvia.mutate(id)} disabled={avvia.isPending}>
-            <Play className="size-4" /> Avvia
-          </Button>
-        </div>
+        {puoScrivere && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(`/schede/${id}/modifica`)}>
+              <Pencil className="size-4" /> Modifica
+            </Button>
+            <Button onClick={() => avvia.mutate(id)} disabled={avvia.isPending}>
+              <Play className="size-4" /> Avvia
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4">
@@ -80,7 +89,9 @@ export function SchedaDettaglioPage() {
 
         {esercizi.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Nessun esercizio ancora: aggiungine uno dalla libreria qui sotto.
+            {puoScrivere
+              ? "Nessun esercizio ancora: aggiungine uno dalla libreria qui sotto."
+              : "Nessun esercizio in questa scheda."}
           </p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -90,6 +101,7 @@ export function SchedaDettaglioPage() {
                   <SortableEsercizioRow
                     key={voce.id}
                     voce={voce}
+                    solaLettura={!puoScrivere}
                     onModifica={() => setInModifica(voce)}
                     onRimuovi={() => rimuovi.mutate(voce.id)}
                   />
@@ -99,20 +111,24 @@ export function SchedaDettaglioPage() {
           </DndContext>
         )}
 
-        <AggiungiEsercizioForm
-          esclusi={new Set(esercizi.map((v) => v.esercizio.id))}
-          inCorso={aggiungi.isPending}
-          onAggiungi={(dati) => aggiungi.mutate(dati)}
-        />
+        {puoScrivere && (
+          <AggiungiEsercizioForm
+            esclusi={new Set(esercizi.map((v) => v.esercizio.id))}
+            inCorso={aggiungi.isPending}
+            onAggiungi={(dati) => aggiungi.mutate(dati)}
+          />
+        )}
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Non trovi l'esercizio che cerchi?{" "}
-        <Link to="/libreria" className="text-primary hover:underline">
-          Aggiungilo alla libreria
-        </Link>
-        .
-      </p>
+      {puoScrivere && (
+        <p className="text-sm text-muted-foreground">
+          Non trovi l'esercizio che cerchi?{" "}
+          <Link to="/libreria" className="text-primary hover:underline">
+            Aggiungilo alla libreria
+          </Link>
+          .
+        </p>
+      )}
 
       <ModificaEsercizioDialog
         voce={inModifica}

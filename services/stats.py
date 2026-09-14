@@ -58,10 +58,19 @@ def volume_nel_tempo():
 
 
 def ripetizioni_nel_tempo():
-    """Ripetizioni totali per giorno: copre anche elastico e corpo libero."""
+    """Ripetizioni totali per giorno: copre anche elastico e corpo libero.
+
+    E' il volume degli esercizi senza peso, quindi come il volume in kg esclude
+    il riscaldamento.
+    """
     labels, valori = [], []
     for giorno, sessioni in reversed(_sessioni_per_giorno()):
-        totale = sum(s.ripetizioni or 0 for sessione in sessioni for s in sessione.serie)
+        totale = sum(
+            s.ripetizioni or 0
+            for sessione in sessioni
+            for s in sessione.serie
+            if not s.di_riscaldamento
+        )
         labels.append(giorno.isoformat())
         valori.append(totale)
     return {"labels": labels, "valori": valori}
@@ -92,6 +101,8 @@ def progressione_esercizio(esercizio_id):
         .all()
     )
     for serie in righe:
+        if serie.di_riscaldamento:
+            continue
         valore = getattr(serie, campo)
         if valore is None:
             continue

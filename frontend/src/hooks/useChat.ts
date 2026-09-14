@@ -20,6 +20,7 @@ export function useNuovaConversazione() {
   return useMutation({
     mutationFn: () => chatApi.nuova(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversazioni"] }),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Errore imprevisto."),
   })
 }
 
@@ -34,15 +35,25 @@ export function useEliminaConversazione() {
   })
 }
 
-export function useInviaMessaggio(conversazioneId: number) {
+// La conversazione arriva con le variabili e non come argomento dell'hook: la
+// prima domanda di una chat nuova crea la conversazione e la invia nello stesso
+// click, quando l'hook e' ancora legato al render in cui l'id non esisteva.
+//
+// Le invalidazioni vengono restituite, cosi' la mutation resta in corso fino al
+// refetch: la bolla in attesa sparisce solo quando la risposta e' gia' in lista.
+export function useInviaMessaggio() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ testo, nSessioni }: { testo: string; nSessioni?: number }) =>
-      chatApi.inviaMessaggio(conversazioneId, testo, nSessioni),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversazioni", conversazioneId] })
-      queryClient.invalidateQueries({ queryKey: ["conversazioni"] })
-    },
+    mutationFn: ({
+      conversazioneId,
+      testo,
+      nSessioni,
+    }: {
+      conversazioneId: number
+      testo: string
+      nSessioni?: number
+    }) => chatApi.inviaMessaggio(conversazioneId, testo, nSessioni),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversazioni"] }),
     onError: (err) => {
       const msg = err instanceof ApiError ? err.message : "Errore imprevisto."
       toast.error(msg)
@@ -50,31 +61,33 @@ export function useInviaMessaggio(conversazioneId: number) {
   })
 }
 
-export function useRigenera(conversazioneId: number) {
+export function useRigenera() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({
+      conversazioneId,
       messaggioId,
       testo,
       nSessioni,
       conferma,
     }: {
+      conversazioneId: number
       messaggioId: number
       testo: string
       nSessioni?: number
       conferma?: boolean
     }) => chatApi.rigenera(conversazioneId, messaggioId, testo, nSessioni, conferma),
-    onSuccess: (risultato) => {
+    onSuccess: async (risultato) => {
       if (!risultato.conferma_richiesta) {
-        queryClient.invalidateQueries({ queryKey: ["conversazioni", conversazioneId] })
+        await queryClient.invalidateQueries({ queryKey: ["conversazioni"] })
       }
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "Errore imprevisto."),
   })
 }
 
-export function useModelliAi() {
-  return useQuery({ queryKey: ["ai", "modelli"], queryFn: chatApi.modelli })
+export function useModelliAi(abilitato = true) {
+  return useQuery({ queryKey: ["ai", "modelli"], queryFn: chatApi.modelli, enabled: abilitato })
 }
 
 export function useCambiaModello() {
@@ -89,8 +102,8 @@ export function useCambiaModello() {
   })
 }
 
-export function useStatoOllama() {
-  return useQuery({ queryKey: ["ollama", "stato"], queryFn: chatApi.statoOllama })
+export function useStatoOllama(abilitato = true) {
+  return useQuery({ queryKey: ["ollama", "stato"], queryFn: chatApi.statoOllama, enabled: abilitato })
 }
 
 export function useAvviaOllama() {

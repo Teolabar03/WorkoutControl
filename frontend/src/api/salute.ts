@@ -56,8 +56,10 @@ export interface MetricaRicevuta {
 }
 
 export interface StatoSalute {
-  /** WORKOUT_INGEST_TOKEN presente sul server: senza, l'endpoint è spento. */
+  /** Il workout ha un token: senza, il telefono non ha come spedirgli i dati. */
   ingest_attivo: boolean
+  /** Il token del workout, da mettere in HC Webhook. null per l'allenatore. */
+  token: string | null
   /** Vero solo quando dal telefono è già arrivato qualcosa. */
   collegata: boolean
   url_webhook: string
@@ -84,6 +86,7 @@ export const saluteApi = {
   pasti: (dal: string, al: string) =>
     api.get<Pasto[]>(`/nutrizione/pasti?dal=${dal}&al=${al}`),
   stato: () => api.get<StatoSalute>("/salute/stato"),
+  generaToken: () => api.post<{ token: string }>("/salute/token"),
   importa: (file: File) => {
     const form = new FormData()
     form.append("file", file)

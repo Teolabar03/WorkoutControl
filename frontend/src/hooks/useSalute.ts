@@ -34,6 +34,19 @@ export function useStatoSalute() {
   return useQuery({ queryKey: ["salute", "stato"], queryFn: saluteApi.stato })
 }
 
+/** Nuovo token di sincronizzazione del workout: il vecchio smette subito di valere. */
+export function useGeneraTokenSalute() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => saluteApi.generaToken(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["salute", "stato"] })
+      toast.success("Nuovo token generato: inseriscilo in HC Webhook.")
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Errore imprevisto."),
+  })
+}
+
 export function useImportaExport() {
   const queryClient = useQueryClient()
   return useMutation({

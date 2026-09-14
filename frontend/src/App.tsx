@@ -7,7 +7,7 @@ import { Layout } from "@/components/layout/Layout"
 import { LoginPage } from "@/pages/LoginPage"
 import { ConfigurazioneServerPage } from "@/pages/ConfigurazioneServerPage"
 import { leggiOrigin, nativo } from "@/lib/server"
-import { useAuthStatus } from "@/hooks/useAuth"
+import { useAuthStatus, usePermessi } from "@/hooks/useAuth"
 import { CalendarioPage } from "@/pages/CalendarioPage"
 import { GiornoPage } from "@/pages/GiornoPage"
 import { SchedePage } from "@/pages/SchedePage"
@@ -23,6 +23,7 @@ import { NutrizionePage } from "@/pages/NutrizionePage"
 import { DiarioPage } from "@/pages/DiarioPage"
 import { ChatPage } from "@/pages/ChatPage"
 import { ImpostazioniPage } from "@/pages/ImpostazioniPage"
+import { UtenzePage } from "@/pages/UtenzePage"
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
@@ -60,6 +61,14 @@ function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** Le pagine che esistono solo per scrivere (avviare o inserire un
+ *  allenamento, creare o modificare una scheda): l'allenatore torna al
+ *  calendario invece di trovarsi un modulo che risponderebbe 403. */
+function SoloScrittura({ children }: { children: ReactNode }) {
+  const { puoScrivere } = usePermessi()
+  return puoScrivere ? <>{children}</> : <Navigate to="/calendario" replace />
+}
+
 function App() {
   // Solo dentro l'APK (vedi lib/aggiornamenti.ts): da browser non fa nulla.
   useEffect(() => {
@@ -83,13 +92,25 @@ function App() {
                 <Route path="calendario" element={<CalendarioPage />} />
                 <Route path="calendario/:giorno" element={<GiornoPage />} />
                 <Route path="schede" element={<SchedePage />} />
-                <Route path="schede/nuova" element={<SchedaFormPage />} />
+                <Route path="schede/nuova" element={<SoloScrittura><SchedaFormPage /></SoloScrittura>} />
                 <Route path="schede/:schedaId" element={<SchedaDettaglioPage />} />
-                <Route path="schede/:schedaId/modifica" element={<SchedaFormPage />} />
+                <Route
+                  path="schede/:schedaId/modifica"
+                  element={<SoloScrittura><SchedaFormPage /></SoloScrittura>}
+                />
                 <Route path="libreria" element={<LibreriaPage />} />
-                <Route path="sessione/:sessioneId" element={<SessioneAttivaPage />} />
-                <Route path="sessione/manuale" element={<SessioneManualePage />} />
-                <Route path="sessione/:sessioneId/modifica" element={<SessioneManualePage />} />
+                <Route
+                  path="sessione/:sessioneId"
+                  element={<SoloScrittura><SessioneAttivaPage /></SoloScrittura>}
+                />
+                <Route
+                  path="sessione/manuale"
+                  element={<SoloScrittura><SessioneManualePage /></SoloScrittura>}
+                />
+                <Route
+                  path="sessione/:sessioneId/modifica"
+                  element={<SoloScrittura><SessioneManualePage /></SoloScrittura>}
+                />
                 <Route path="statistiche" element={<StatistichePage />} />
                 <Route path="peso" element={<PesoPage />} />
                 {/* La pagina si difende da sola: senza sincronizzazione col
@@ -100,6 +121,7 @@ function App() {
                 <Route path="chat" element={<ChatPage />} />
                 <Route path="chat/:conversazioneId" element={<ChatPage />} />
                 <Route path="impostazioni" element={<ImpostazioniPage />} />
+                <Route path="impostazioni/utenze" element={<UtenzePage />} />
                 <Route path="*" element={<Navigate to="/calendario" replace />} />
               </Route>
             </Routes>

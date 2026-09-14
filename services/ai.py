@@ -737,6 +737,9 @@ def costruisci_payload(n_sessioni):
             "volume_carico_kg": round(sessione.volume_kg, 1),
             "esercizi": list(per_esercizio.values()),
         }
+        if sessione.scheda and sessione.scheda.riscaldamento:
+            # Senza questo il modello leggerebbe i carichi leggeri come un calo.
+            voce_sessione["riscaldamento"] = True
         if sessione.esercizi_saltati:
             voce_sessione["esercizi_saltati"] = [
                 {

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -8,6 +8,7 @@ import { useConversazioni, useEliminaConversazione } from "@/hooks/useChat"
 export function ConversationSidebar({ attivaId }: { attivaId: number | null }) {
   const { data: conversazioni } = useConversazioni()
   const elimina = useEliminaConversazione()
+  const navigate = useNavigate()
 
   if (!conversazioni || conversazioni.length === 0) {
     return <p className="p-3 text-sm text-muted-foreground">Nessuna conversazione salvata.</p>
@@ -39,7 +40,14 @@ export function ConversationSidebar({ attivaId }: { attivaId: number | null }) {
             }
             titolo="Eliminare questa conversazione?"
             descrizione="I messaggi e le azioni salvate andranno persi. L'operazione non è reversibile."
-            onConferma={() => elimina.mutate(c.id)}
+            onConferma={() =>
+              elimina.mutate(c.id, {
+                // Restare sulla conversazione appena cancellata lascerebbe una pagina vuota.
+                onSuccess: () => {
+                  if (c.id === attivaId) navigate("/chat")
+                },
+              })
+            }
           />
         </li>
       ))}

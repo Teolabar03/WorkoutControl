@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import { authApi, type AuthStatus } from "@/api/auth"
+import { ApiError } from "@/lib/api"
 
 export function useAuthStatus() {
   return useQuery({
@@ -8,6 +10,20 @@ export function useAuthStatus() {
     staleTime: Infinity,
     retry: false,
   })
+}
+
+/** Cosa può fare l'utenza collegata.
+ *
+ *  Il backend lo impone comunque (403 su ogni scrittura non permessa): qui
+ *  serve solo a non mostrare pulsanti che non funzionerebbero. */
+export function usePermessi() {
+  const { data } = useAuthStatus()
+  const utente = data?.utente ?? null
+  return {
+    utente,
+    admin: utente?.admin ?? false,
+    puoScrivere: utente?.puo_scrivere ?? false,
+  }
 }
 
 export function useLogin() {
@@ -25,6 +41,19 @@ export function useLogin() {
     onSuccess: (data) => {
       queryClient.setQueryData<AuthStatus>(["auth", "me"], data)
     },
+  })
+}
+
+export function useCambiaPassword() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ attuale, nuova }: { attuale: string; nuova: string }) =>
+      authApi.cambiaPassword(attuale, nuova),
+    onSuccess: (data) => {
+      queryClient.setQueryData<AuthStatus>(["auth", "me"], data)
+      toast.success("Password cambiata.")
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "Errore imprevisto."),
   })
 }
 

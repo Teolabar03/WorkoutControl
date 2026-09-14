@@ -15,6 +15,7 @@ import {
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { dataIt } from "@/lib/format"
 import { useDiarioElenco, useEliminaNota, useNuovaNota } from "@/hooks/useDiario"
+import { usePermessi } from "@/hooks/useAuth"
 
 function coloreGravita(gravita: number): "secondary" | "destructive" | "outline" {
   if (gravita >= 4) return "destructive"
@@ -26,6 +27,7 @@ export function DiarioPage() {
   const { data: note } = useDiarioElenco()
   const nuovaNota = useNuovaNota()
   const eliminaNota = useEliminaNota()
+  const { puoScrivere } = usePermessi()
 
   const oggi = new Date().toISOString().slice(0, 10)
   const [data, setData] = useState(oggi)
@@ -46,6 +48,7 @@ export function DiarioPage() {
     <div className="space-y-6">
       <h1 className="font-heading text-2xl font-semibold">Diario recupero e dolori</h1>
 
+      {puoScrivere && (
       <form
         onSubmit={handleSubmit}
         className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-4 sm:items-end"
@@ -92,6 +95,7 @@ export function DiarioPage() {
           Aggiungi nota
         </Button>
       </form>
+      )}
 
       <div className="rounded-lg border border-border bg-card p-4">
         <h2 className="mb-2 font-heading text-lg font-semibold">Storico</h2>
@@ -111,16 +115,18 @@ export function DiarioPage() {
                     <p className="mt-1 text-sm text-muted-foreground">{n.descrizione}</p>
                   )}
                 </div>
-                <ConfirmDialog
-                  trigger={
-                    <Button variant="ghost" size="icon-sm" aria-label={`Elimina nota ${n.zona_corporea}`}>
-                      <Trash2 className="size-4" />
-                    </Button>
-                  }
-                  titolo="Eliminare questa nota?"
-                  descrizione={`${n.zona_corporea} del ${dataIt(n.data)}. L'operazione non è reversibile.`}
-                  onConferma={() => eliminaNota.mutate(n.id)}
-                />
+                {puoScrivere && (
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="ghost" size="icon-sm" aria-label={`Elimina nota ${n.zona_corporea}`}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    }
+                    titolo="Eliminare questa nota?"
+                    descrizione={`${n.zona_corporea} del ${dataIt(n.data)}. L'operazione non è reversibile.`}
+                    onConferma={() => eliminaNota.mutate(n.id)}
+                  />
+                )}
               </li>
             ))}
           </ul>

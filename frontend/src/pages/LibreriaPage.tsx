@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useArchiviaEsercizioLibreria, useCreaEsercizioLibreria, useLibreria } from "@/hooks/useSchede"
+import { usePermessi } from "@/hooks/useAuth"
 import type { TipoCarico, TipoMisura } from "@/api/schede"
 
 const TIPI_CARICO: { valore: TipoCarico; etichetta: string }[] = [
@@ -29,6 +30,7 @@ export function LibreriaPage() {
   const { data: esercizi } = useLibreria()
   const archivia = useArchiviaEsercizioLibreria()
   const crea = useCreaEsercizioLibreria()
+  const { puoScrivere } = usePermessi()
 
   const [filtroAttrezzo, setFiltroAttrezzo] = useState<string | null>(null)
   const [nome, setNome] = useState("")
@@ -114,19 +116,22 @@ export function LibreriaPage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {e.is_custom && <Badge variant="outline">custom</Badge>}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={e.archiviato ? `Ripristina ${e.nome}` : `Archivia ${e.nome}`}
-                onClick={() => archivia.mutate({ id: e.id, archiviato: !e.archiviato })}
-              >
-                {e.archiviato ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
-              </Button>
+              {puoScrivere && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={e.archiviato ? `Ripristina ${e.nome}` : `Archivia ${e.nome}`}
+                  onClick={() => archivia.mutate({ id: e.id, archiviato: !e.archiviato })}
+                >
+                  {e.archiviato ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                </Button>
+              )}
             </div>
           </li>
         ))}
       </ul>
 
+      {puoScrivere && (
       <details className="rounded-lg border border-border bg-card p-4">
         <summary className="cursor-pointer font-heading text-lg font-semibold">
           Aggiungi esercizio custom
@@ -179,6 +184,7 @@ export function LibreriaPage() {
           </Button>
         </form>
       </details>
+      )}
     </div>
   )
 }

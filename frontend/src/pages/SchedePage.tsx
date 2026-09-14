@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button"
 import { SchedaCard } from "@/components/schede/SchedaCard"
 import { useDuplicaScheda, useSchedeElenco } from "@/hooks/useSchede"
 import { useAvviaSessione } from "@/hooks/useSessioni"
+import { usePermessi } from "@/hooks/useAuth"
 
 export function SchedePage() {
   const { data: schede } = useSchedeElenco()
   const avvia = useAvviaSessione()
   const duplica = useDuplicaScheda()
+  const { puoScrivere } = usePermessi()
 
   return (
     <div className="space-y-6">
@@ -18,11 +20,13 @@ export function SchedePage() {
           <Button variant="outline" asChild>
             <Link to="/libreria">Libreria esercizi</Link>
           </Button>
-          <Button asChild>
-            <Link to="/schede/nuova">
-              <Plus className="size-4" /> Nuova scheda
-            </Link>
-          </Button>
+          {puoScrivere && (
+            <Button asChild>
+              <Link to="/schede/nuova">
+                <Plus className="size-4" /> Nuova scheda
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -37,6 +41,7 @@ export function SchedePage() {
           <SchedaCard
             key={scheda.id}
             scheda={scheda}
+            solaLettura={!puoScrivere}
             avvioInCorso={avvia.isPending}
             onAvvia={() => avvia.mutate(scheda.id)}
             onDuplica={() => duplica.mutate(scheda.id)}

@@ -84,6 +84,7 @@ def crea_scheda_route():
         nome=nome,
         descrizione=corpo.get("descrizione", ""),
         obiettivo=corpo.get("obiettivo", ""),
+        riscaldamento=bool(corpo.get("riscaldamento")),
         esercizi=esercizi,
     )
     scheda = _scheda_o_404(risultato["scheda_id"])
@@ -106,6 +107,7 @@ def modifica_scheda_route(scheda_id):
         descrizione=corpo.get("descrizione"),
         obiettivo=corpo.get("obiettivo"),
         attiva=corpo.get("attiva"),
+        riscaldamento=corpo.get("riscaldamento"),
     )
     return api_ok(serialize_scheda(_scheda_o_404(scheda_id)))
 

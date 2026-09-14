@@ -11,7 +11,9 @@ export function dataIt(iso: string | null | undefined): string {
 export function numeroIt(valore: number | null | undefined): string {
   if (valore === null || valore === undefined) return ""
   // "%g"-like: niente zeri decimali inutili (1.5 -> "1,5", 2.0 -> "2").
-  const testo = Number(valore.toPrecision(12)).toString()
+  // Al massimo due decimali: i dati importati da Samsung Health sono float a
+  // 32 bit (72,3 kg arriva come 72.30000305175781).
+  const testo = Number((Math.round(valore * 100) / 100).toPrecision(12)).toString()
   return testo.replace(".", ",")
 }
 

@@ -119,10 +119,8 @@ def rigenera_messaggio_route(conversazione_id, messaggio_id):
         raise ApiError("NOT_FOUND", "Messaggio non trovato.", 404)
     if messaggio.ruolo != RUOLO_UTENTE:
         raise ApiError("VALIDATION_ERROR", "Si può modificare solo un tuo messaggio.", 422)
-    if messaggio.id != _id_ultimo_utente(conversazione):
-        raise ApiError(
-            "VALIDATION_ERROR", "Si può modificare solo l'ultimo messaggio inviato.", 422
-        )
+    # Qualunque domanda si puo' modificare, come nelle chat AI comuni: tutto
+    # quello che viene dopo si scarta e la conversazione riparte da li'.
 
     dati = request.get_json(force=True, silent=True) or {}
     testo = (dati.get("testo") or "").strip()

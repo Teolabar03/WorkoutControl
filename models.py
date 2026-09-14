@@ -5,11 +5,95 @@ gia' fissati in CLAUDE.md; i testi mostrati all'utente stanno nei template.
 """
 
 import json
+import secrets
 from datetime import date, datetime
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import declared_attr
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from tenancy import workout_corrente
 
 db = SQLAlchemy()
+
+
+RUOLO_ADMIN = "admin"
+RUOLO_STANDARD = "standard"
+RUOLO_ALLENATORE = "allenatore"
+RUOLI = (RUOLO_ADMIN, RUOLO_STANDARD, RUOLO_ALLENATORE)
+
+
+class DatiWorkout:
+    """Mixin delle tabelle i cui dati appartengono a un workout.
+
+    Basta ereditarlo perche' le query vengano filtrate sul workout di chi fa la
+    richiesta e le righe nuove lo ricevano da sole (vedi tenancy.py). Nullable
+    solo per `_allinea_schema`, che sa aggiungere unicamente colonne nullable:
+    a migrazione fatta nessuna riga resta senza workout.
+    """
+
+    @declared_attr
+    def workout_id(cls):
+        return db.Column(db.Integer, db.ForeignKey("workout.id"), nullable=True, index=True)
+
+
+class Workout(db.Model):
+    """Un insieme di dati indipendente: schede, allenamenti, peso, salute.
+
+    Le utenze collegate allo stesso workout vedono gli stessi dati. La libreria
+    esercizi resta invece condivisa fra tutti.
+    """
+
+    __tablename__ = "workout"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(80), nullable=False, unique=True)
+    # Token con cui il telefono (HC Webhook) spedisce i dati di Samsung Health:
+    # l'ingest non ha una sessione, quindi e' il token a dire di chi sono i
+    # dati. Vuoto = sincronizzazione spenta per questo workout.
+    ingest_token = db.Column(db.String(128), nullable=True, unique=True)
+    data_creazione = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    utenti = db.relationship("Utente", back_populates="workout")
+
+    def genera_token(self):
+        self.ingest_token = secrets.token_urlsafe(32)
+
+
+class Utente(db.Model):
+    __tablename__ = "utente"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    ruolo = db.Column(db.String(20), nullable=False, default=RUOLO_STANDARD)
+    # L'assistente consuma chiavi API a pagamento e scrive sui dati: si abilita
+    # utenza per utenza. All'allenatore non si applica mai, flag o no.
+    ai_abilitata = db.Column(db.Boolean, nullable=False, default=False)
+    attivo = db.Column(db.Boolean, nullable=False, default=True)
+    workout_id = db.Column(db.Integer, db.ForeignKey("workout.id"), nullable=False, index=True)
+    data_creazione = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    workout = db.relationship("Workout", back_populates="utenti")
+
+    def imposta_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def verifica_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    @property
+    def admin(self):
+        return self.ruolo == RUOLO_ADMIN
+
+    @property
+    def puo_scrivere(self):
+        """L'allenatore guarda e basta: niente allenamenti, niente modifiche."""
+        return self.ruolo != RUOLO_ALLENATORE
+
+    @property
+    def usa_assistente(self):
+        return self.ai_abilitata and self.ruolo != RUOLO_ALLENATORE
 
 
 # Un esercizio puo' caricare peso libero, elastico o solo il corpo.
@@ -23,14 +107,28 @@ MEASURE_TIME = "tempo"
 
 
 class Impostazione(db.Model):
-    """Chiave/valore per le poche preferenze globali dell'app."""
+    """Chiave/valore per le poche preferenze dell'app.
+
+    Quasi tutte appartengono a un workout (timer, attrezzatura, altezza,
+    obiettivi). Le chiavi in GLOBALI valgono per tutta l'installazione, perche'
+    decidono quale modello AI gira sul server. Non eredita DatiWorkout: le righe
+    globali hanno workout_id vuoto e il filtro automatico le nasconderebbe.
+    """
 
     __tablename__ = "impostazione"
 
-    chiave = db.Column(db.String(64), primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
+    workout_id = db.Column(db.Integer, db.ForeignKey("workout.id"), nullable=True, index=True)
+    chiave = db.Column(db.String(64), nullable=False)
     # Text e non String: l'attrezzatura e' un testo libero scritto dall'utente,
     # non un numero o un id come le altre preferenze.
     valore = db.Column(db.Text, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("workout_id", "chiave", name="uq_impostazione_workout_chiave"),
+    )
+
+    GLOBALI = frozenset({"ai_modello", "ollama_modello"})
 
     DEFAULTS = {
         "timer_default_sec": "90",
@@ -69,8 +167,18 @@ class Impostazione(db.Model):
     }
 
     @staticmethod
+    def _riga(chiave):
+        workout_id = None if chiave in Impostazione.GLOBALI else workout_corrente()
+        riga = (
+            db.session.query(Impostazione)
+            .filter_by(workout_id=workout_id, chiave=chiave)
+            .first()
+        )
+        return riga, workout_id
+
+    @staticmethod
     def get(chiave, default=None):
-        row = db.session.get(Impostazione, chiave)
+        row, _ = Impostazione._riga(chiave)
         if row is not None:
             return row.valore
         if default is not None:
@@ -86,9 +194,9 @@ class Impostazione(db.Model):
 
     @staticmethod
     def set(chiave, valore):
-        row = db.session.get(Impostazione, chiave)
+        row, workout_id = Impostazione._riga(chiave)
         if row is None:
-            row = Impostazione(chiave=chiave)
+            row = Impostazione(chiave=chiave, workout_id=workout_id)
             db.session.add(row)
         row.valore = str(valore)
 
@@ -121,7 +229,7 @@ class EsercizioLibreria(db.Model):
         return self.tipo_misura == MEASURE_TIME
 
 
-class Scheda(db.Model):
+class Scheda(DatiWorkout, db.Model):
     __tablename__ = "scheda"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -130,6 +238,11 @@ class Scheda(db.Model):
     obiettivo = db.Column(db.String(80), nullable=False, default="")
     data_creazione = db.Column(db.Date, nullable=False, default=date.today)
     attiva = db.Column(db.Boolean, nullable=False, default=True)
+    # Scheda di riscaldamento: le sue serie restano nello storico ma non
+    # contano per PR, volume e progressione, perche' sono carichi di
+    # avvicinamento e non dicono niente sulla forza. Nullable solo per poterla
+    # aggiungere a un database gia' popolato (vedi `_allinea_schema`): NULL = no.
+    riscaldamento = db.Column(db.Boolean, nullable=True, default=False)
 
     esercizi = db.relationship(
         "EsercizioScheda",
@@ -140,7 +253,7 @@ class Scheda(db.Model):
     sessioni = db.relationship("Sessione", back_populates="scheda")
 
 
-class EsercizioScheda(db.Model):
+class EsercizioScheda(DatiWorkout, db.Model):
     """Un esercizio della libreria calato in una scheda, con i suoi target."""
 
     __tablename__ = "esercizio_scheda"
@@ -173,7 +286,7 @@ class EsercizioScheda(db.Model):
         return Impostazione.get_int("timer_default_sec", 90)
 
 
-class EsercizioSessione(db.Model):
+class EsercizioSessione(DatiWorkout, db.Model):
     """Un esercizio della sessione attiva, snapshot indipendente dalla scheda.
 
     Copiato da EsercizioScheda all'avvio quando la sessione parte da una
@@ -218,7 +331,7 @@ class EsercizioSessione(db.Model):
         return Impostazione.get_int("timer_default_sec", 90)
 
 
-class Sessione(db.Model):
+class Sessione(DatiWorkout, db.Model):
     __tablename__ = "sessione"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -261,7 +374,7 @@ class Sessione(db.Model):
         return sum(s.volume_kg for s in self.serie)
 
 
-class SerieEseguita(db.Model):
+class SerieEseguita(DatiWorkout, db.Model):
     """Una singola serie registrata durante una sessione."""
 
     __tablename__ = "serie_eseguita"
@@ -301,19 +414,27 @@ class SerieEseguita(db.Model):
     esercizio_sessione = db.relationship("EsercizioSessione")
 
     @property
+    def di_riscaldamento(self):
+        """Vero se la serie e' stata fatta in una sessione su una scheda di riscaldamento."""
+        scheda = self.sessione.scheda
+        return bool(scheda and scheda.riscaldamento)
+
+    @property
     def volume_kg(self):
         """Carico totale mosso: peso x numero di manubri x ripetizioni.
 
         Vale 0 per elastici e corpo libero, dove il carico non e' misurabile
         in kg: quegli esercizi si seguono con le ripetizioni, non col volume.
+        Vale 0 anche per il riscaldamento, che gonfierebbe il volume con carichi
+        di avvicinamento.
         """
-        if not self.peso_kg or not self.ripetizioni:
+        if self.di_riscaldamento or not self.peso_kg or not self.ripetizioni:
             return 0.0
         carichi = max(self.esercizio.carichi_per_serie, 1)
         return self.peso_kg * carichi * self.ripetizioni
 
 
-class EsercizioSaltato(db.Model):
+class EsercizioSaltato(DatiWorkout, db.Model):
     """Esercizio della scheda dichiarato esplicitamente come non svolto.
 
     Diverso dall'assenza di serie: qui l'utente ha detto "questo l'ho saltato".
@@ -341,13 +462,16 @@ class EsercizioSaltato(db.Model):
     esercizio_scheda = db.relationship("EsercizioScheda")
 
 
-class PesoCorporeo(db.Model):
+class PesoCorporeo(DatiWorkout, db.Model):
     __tablename__ = "peso_corporeo"
 
     id = db.Column(db.Integer, primary_key=True)
-    data = db.Column(db.Date, nullable=False, unique=True, index=True)
+    data = db.Column(db.Date, nullable=False, index=True)
     valore_kg = db.Column(db.Float, nullable=False)
     note = db.Column(db.Text, nullable=False, default="")
+
+    # Una misura al giorno, per workout.
+    __table_args__ = (db.UniqueConstraint("workout_id", "data", name="uq_peso_workout_data"),)
 
 
 # Da dove arriva un dato di salute: scritto a mano nell'app o sincronizzato da
@@ -356,10 +480,10 @@ ORIGINE_MANUALE = "manuale"
 ORIGINE_SAMSUNG = "samsung_health"
 
 
-class SonnoNotte(db.Model):
+class SonnoNotte(DatiWorkout, db.Model):
     """Una dormita importata da Health Connect.
 
-    `inizio` e' unico perche' fa da chiave di deduplica: l'app ponte rispedisce
+    `inizio` (per workout) fa da chiave di deduplica: l'app ponte rispedisce
     a ogni sincronizzazione una finestra mobile di 48 ore, quindi la stessa
     notte arriva piu' volte e va aggiornata in loco invece che riscritta.
     """
@@ -367,7 +491,7 @@ class SonnoNotte(db.Model):
     __tablename__ = "sonno_notte"
 
     id = db.Column(db.Integer, primary_key=True)
-    inizio = db.Column(db.DateTime, nullable=False, unique=True, index=True)
+    inizio = db.Column(db.DateTime, nullable=False, index=True)
     fine = db.Column(db.DateTime, nullable=False)
     # Giorno del risveglio, non dell'addormentamento: e' quello in cui la
     # dormita "conta" per l'allenamento e per i grafici.
@@ -379,12 +503,16 @@ class SonnoNotte(db.Model):
     minuti_sveglio = db.Column(db.Integer, nullable=True)
     origine = db.Column(db.String(40), nullable=False, default=ORIGINE_SAMSUNG)
 
+    __table_args__ = (
+        db.UniqueConstraint("workout_id", "inizio", name="uq_sonno_workout_inizio"),
+    )
+
     @property
     def ore(self):
         return round(self.durata_minuti / 60, 2)
 
 
-class PastoNutrizione(db.Model):
+class PastoNutrizione(DatiWorkout, db.Model):
     """Un pasto registrato in Samsung Health e importato via Health Connect.
 
     Si tengono i singoli pasti e non il totale del giorno: i totali si calcolano
@@ -409,10 +537,12 @@ class PastoNutrizione(db.Model):
     # Stessa logica di SonnoNotte: orario piu' nome identificano il pasto fra
     # una sincronizzazione e l'altra, cosi' i reinvii aggiornano invece di
     # duplicare.
-    __table_args__ = (db.UniqueConstraint("inizio", "nome", name="uq_pasto_origine"),)
+    __table_args__ = (
+        db.UniqueConstraint("workout_id", "inizio", "nome", name="uq_pasto_origine"),
+    )
 
 
-class MisuraSalute(db.Model):
+class MisuraSalute(DatiWorkout, db.Model):
     """Una misura di salute qualsiasi arrivata dal telefono.
 
     Health Connect espone una trentina di tipi di dato — passi, battito,
@@ -449,7 +579,7 @@ class MisuraSalute(db.Model):
     # una finestra di 48 ore a ogni sincronizzazione, quindi la stessa misura
     # arriva piu' volte e va aggiornata in loco invece che riscritta.
     __table_args__ = (
-        db.UniqueConstraint("tipo", "inizio", name="uq_misura_tipo_inizio"),
+        db.UniqueConstraint("workout_id", "tipo", "inizio", name="uq_misura_tipo_inizio"),
     )
 
 
@@ -459,7 +589,7 @@ PR_REPS = "reps"
 PR_TIME = "tempo"
 
 
-class PR(db.Model):
+class PR(DatiWorkout, db.Model):
     """Record personale per esercizio.
 
     `tipo` dipende dall'esercizio: peso massimo per i manubri, ripetizioni
@@ -498,7 +628,7 @@ class PR(db.Model):
         return f"{self.valore:g} rip."
 
 
-class NotaDolore(db.Model):
+class NotaDolore(DatiWorkout, db.Model):
     """Diario recupero/dolori, separato dalle note della singola serie."""
 
     __tablename__ = "nota_dolore"
@@ -534,6 +664,9 @@ class Conversazione(db.Model):
     data_ultimo_messaggio = db.Column(
         db.DateTime, nullable=False, default=datetime.now, index=True
     )
+    # Le chat sono della singola utenza, anche fra utenze dello stesso workout
+    # (vedi tenancy.py). Nullable solo per `_allinea_schema`.
+    utente_id = db.Column(db.Integer, db.ForeignKey("utente.id"), nullable=True, index=True)
 
     messaggi = db.relationship(
         "MessaggioChat",

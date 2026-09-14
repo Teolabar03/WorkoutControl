@@ -5,7 +5,10 @@ import type { Sessione } from "@/api/sessioni"
 export interface AppContext {
   sessione_corrente: Sessione | null
   oggi: string
+  /** Assistente utilizzabile da questa utenza: chiave sul server più flag AI. */
   ai_disponibile: boolean
+  /** Solo la chiave sul server: distingue "non configurato" da "non abilitato". */
+  ai_configurato: boolean
   /** Vero solo dopo il primo dato arrivato dal telefono: finché è falso la
    *  sezione Salute non compare da nessuna parte. */
   salute_collegata: boolean

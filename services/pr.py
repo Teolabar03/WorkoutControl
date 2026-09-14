@@ -60,7 +60,14 @@ def controlla_pr(serie):
     Il valore di ritorno e' `False` alla primissima serie di un esercizio: il
     record viene salvato comunque (serve come baseline) ma non ha senso
     festeggiarlo, altrimenti ogni esercizio nuovo mostrerebbe un falso PR.
+
+    Le serie di riscaldamento non entrano mai nel record, ne' come PR ne' come
+    baseline.
     """
+    if serie.di_riscaldamento:
+        serie.is_pr = False
+        return False
+
     esercizio = serie.esercizio
     tipo = tipo_pr(esercizio)
     valore = _valore_serie(serie, tipo)
@@ -74,6 +81,7 @@ def controlla_pr(serie):
 
     db.session.add(
         PR(
+            workout_id=serie.workout_id,
             esercizio_libreria_id=esercizio.id,
             tipo=tipo,
             valore=float(valore),
@@ -115,9 +123,16 @@ def ricalcola_pr(esercizi_ids):
 
     migliori = {}
     for serie in serie_storiche:
+        if serie.di_riscaldamento:
+            serie.is_pr = False
+            continue
+
         tipo = tipo_pr(serie.esercizio)
         valore = _valore_serie(serie, tipo)
-        precedente = migliori.get(serie.esercizio_libreria_id)
+        # Per workout oltre che per esercizio: all'avvio (migrazioni) questa
+        # funzione gira senza filtro e vede tutti i workout insieme.
+        chiave = (serie.workout_id, serie.esercizio_libreria_id)
+        precedente = migliori.get(chiave)
 
         if not valore or (precedente is not None and valore <= precedente):
             serie.is_pr = False
@@ -125,6 +140,7 @@ def ricalcola_pr(esercizi_ids):
 
         db.session.add(
             PR(
+                workout_id=serie.workout_id,
                 esercizio_libreria_id=serie.esercizio_libreria_id,
                 tipo=tipo,
                 valore=float(valore),
@@ -137,7 +153,7 @@ def ricalcola_pr(esercizi_ids):
         # Come in `controlla_pr`: il primo valore in assoluto e' solo la
         # baseline, non un miglioramento da festeggiare.
         serie.is_pr = precedente is not None
-        migliori[serie.esercizio_libreria_id] = float(valore)
+        migliori[chiave] = float(valore)
 
 
 def storico_pr():

@@ -8,6 +8,7 @@ import { useMeseCalendario } from "@/hooks/useCalendario"
 import { useSchedeElenco } from "@/hooks/useSchede"
 import { useAvviaSessione } from "@/hooks/useSessioni"
 import { useAppContext } from "@/hooks/useAppContext"
+import { usePermessi } from "@/hooks/useAuth"
 
 const NOMI_MESI = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
@@ -24,6 +25,7 @@ export function CalendarioPage() {
   const { data: schede } = useSchedeElenco(true)
   const avvia = useAvviaSessione()
   const navigate = useNavigate()
+  const { puoScrivere } = usePermessi()
 
   const [schedaScelta, setSchedaScelta] = useState<string>("")
 
@@ -40,7 +42,7 @@ export function CalendarioPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-2xl font-semibold">Calendario</h1>
-        {context?.sessione_corrente ? (
+        {puoScrivere && (context?.sessione_corrente ? (
           <Button onClick={() => navigate(`/sessione/${context.sessione_corrente!.id}`)}>
             Riprendi allenamento
           </Button>
@@ -65,7 +67,7 @@ export function CalendarioPage() {
               <Play className="size-4" /> Avvia
             </Button>
           </div>
-        )}
+        ))}
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4">

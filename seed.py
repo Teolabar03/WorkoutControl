@@ -5,6 +5,8 @@ ha righe vuote irregolari e colonne disallineate, e questa importazione avviene
 una volta sola. Il file resta nel repo come documento di origine.
 
 `applica_seed()` e' idempotente: puo' girare a ogni avvio senza duplicare nulla.
+La libreria esercizi e' condivisa da tutti i workout; le due schede di partenza
+vanno al workout iniziale, gli altri workout nascono senza schede.
 """
 
 from models import (
@@ -15,7 +17,6 @@ from models import (
     MEASURE_TIME,
     EsercizioLibreria,
     EsercizioScheda,
-    Impostazione,
     Scheda,
     db,
 )
@@ -239,12 +240,12 @@ SCHEDE = [
 ]
 
 
-def applica_seed():
-    """Crea impostazioni, libreria esercizi e schede se non esistono gia'."""
-    for chiave, valore in Impostazione.DEFAULTS.items():
-        if db.session.get(Impostazione, chiave) is None:
-            db.session.add(Impostazione(chiave=chiave, valore=valore))
+def applica_seed(workout_id):
+    """Crea libreria esercizi e schede iniziali se non esistono gia'.
 
+    Le impostazioni non si seminano: `Impostazione.get` ricade da solo sui
+    valori di DEFAULTS, per ogni workout.
+    """
     per_nome = {}
     for nome, attrezzatura, gruppo, carico, misura, carichi, note in ESERCIZI:
         esercizio = db.session.query(EsercizioLibreria).filter_by(nome=nome).first()
@@ -267,12 +268,20 @@ def applica_seed():
     for nome_scheda, descrizione, righe in SCHEDE:
         if db.session.query(Scheda).filter_by(nome=nome_scheda).first() is not None:
             continue
-        scheda = Scheda(nome=nome_scheda, descrizione=descrizione, obiettivo="Ipertrofia")
+        # Il seed gira all'avvio, fuori da una richiesta: il workout non lo
+        # assegna il filtro automatico, va scritto qui.
+        scheda = Scheda(
+            nome=nome_scheda,
+            descrizione=descrizione,
+            obiettivo="Ipertrofia",
+            workout_id=workout_id,
+        )
         db.session.add(scheda)
         db.session.flush()
         for ordine, (nome_es, serie, rep, durata, peso, note) in enumerate(righe):
             db.session.add(
                 EsercizioScheda(
+                    workout_id=workout_id,
                     scheda_id=scheda.id,
                     esercizio_libreria_id=per_nome[nome_es].id,
                     ordine=ordine,

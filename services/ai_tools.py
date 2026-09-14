@@ -198,6 +198,8 @@ def _sessione_json(sessione, con_serie=False):
         "umore": sessione.umore,
         "note_generali": sessione.note_generali or None,
     }
+    if sessione.scheda and sessione.scheda.riscaldamento:
+        dati["riscaldamento"] = True
     if con_serie:
         dati["serie"] = [
             {
@@ -249,6 +251,7 @@ def elenco_schede(includi_archiviate=False):
                 "obiettivo": s.obiettivo or None,
                 "descrizione": s.descrizione or None,
                 "attiva": s.attiva,
+                "riscaldamento": bool(s.riscaldamento),
                 "n_esercizi": len(s.esercizi),
                 "n_allenamenti": len(s.sessioni),
             }
@@ -275,6 +278,7 @@ def dettaglio_scheda(scheda_id):
         "obiettivo": scheda.obiettivo or None,
         "descrizione": scheda.descrizione or None,
         "attiva": scheda.attiva,
+        "riscaldamento": bool(scheda.riscaldamento),
         "esercizi": [_voce_json(v) for v in scheda.esercizi],
     }
 
@@ -546,6 +550,11 @@ def leggi_impostazioni():
                 "type": "string",
                 "description": "Es. forza, ipertrofia, resistenza.",
             },
+            "riscaldamento": {
+                "type": "boolean",
+                "description": "True per una scheda di riscaldamento: le sue serie "
+                "non contano per PR, volume e progressione.",
+            },
             "esercizi": {
                 "type": "array",
                 "description": "Esercizi della scheda, nell'ordine di esecuzione.",
@@ -577,7 +586,7 @@ def leggi_impostazioni():
     },
     scrive=True,
 )
-def crea_scheda(nome, descrizione="", obiettivo="", esercizi=None):
+def crea_scheda(nome, descrizione="", obiettivo="", esercizi=None, riscaldamento=False):
     nome = (nome or "").strip()
     if not nome:
         raise ErroreStrumento("Il nome della scheda e' obbligatorio.")
@@ -586,6 +595,7 @@ def crea_scheda(nome, descrizione="", obiettivo="", esercizi=None):
         nome=nome,
         descrizione=(descrizione or "").strip(),
         obiettivo=(obiettivo or "").strip(),
+        riscaldamento=bool(riscaldamento),
         data_creazione=date.today(),
     )
     db.session.add(scheda)
@@ -623,8 +633,8 @@ def _aggiungi_voce(scheda, dati, ordine):
 
 @strumento(
     "aggiorna_scheda",
-    "Cambia nome, descrizione, obiettivo o stato attivo/archiviato di una "
-    "scheda. I campi non indicati restano come sono.",
+    "Cambia nome, descrizione, obiettivo, flag di riscaldamento o stato "
+    "attivo/archiviato di una scheda. I campi non indicati restano come sono.",
     {
         "type": "object",
         "properties": {
@@ -633,12 +643,18 @@ def _aggiungi_voce(scheda, dati, ordine):
             "descrizione": {"type": "string"},
             "obiettivo": {"type": "string"},
             "attiva": {"type": "boolean"},
+            "riscaldamento": {
+                "type": "boolean",
+                "description": "True se e' una scheda di riscaldamento (niente PR e volume).",
+            },
         },
         "required": ["scheda_id"],
     },
     scrive=True,
 )
-def aggiorna_scheda(scheda_id, nome=None, descrizione=None, obiettivo=None, attiva=None):
+def aggiorna_scheda(
+    scheda_id, nome=None, descrizione=None, obiettivo=None, attiva=None, riscaldamento=None
+):
     scheda = _scheda(scheda_id)
     if nome is not None:
         if not nome.strip():
@@ -650,6 +666,14 @@ def aggiorna_scheda(scheda_id, nome=None, descrizione=None, obiettivo=None, atti
         scheda.obiettivo = obiettivo.strip()
     if attiva is not None:
         scheda.attiva = bool(attiva)
+    if riscaldamento is not None and bool(riscaldamento) != bool(scheda.riscaldamento):
+        scheda.riscaldamento = bool(riscaldamento)
+        db.session.flush()
+        # I PR degli allenamenti gia' fatti con questa scheda erano stati
+        # calcolati con il flag vecchio: vanno rifatti, in un verso o nell'altro.
+        ricalcola_pr(
+            {s.esercizio_libreria_id for sessione in scheda.sessioni for s in sessione.serie}
+        )
     db.session.commit()
     return {
         "_azione": f"Aggiornata scheda «{scheda.nome}»",
@@ -658,6 +682,7 @@ def aggiorna_scheda(scheda_id, nome=None, descrizione=None, obiettivo=None, atti
             "nome": scheda.nome,
             "obiettivo": scheda.obiettivo or None,
             "attiva": scheda.attiva,
+            "riscaldamento": bool(scheda.riscaldamento),
         },
     }
 
@@ -682,6 +707,7 @@ def duplica_scheda(scheda_id, nuovo_nome=None):
         nome=(nuovo_nome or f"{originale.nome} (copia)").strip(),
         descrizione=originale.descrizione,
         obiettivo=originale.obiettivo,
+        riscaldamento=originale.riscaldamento,
         data_creazione=date.today(),
     )
     db.session.add(copia)
@@ -1176,6 +1202,9 @@ def registra_peso_corporeo(valore_kg, data=None, note=""):
     valore = _numero(valore_kg, "valore_kg")
     if not valore or valore <= 0:
         raise ErroreStrumento("Il peso deve essere maggiore di zero.")
+    # Samsung Health salva il peso come float a 32 bit: 72,3 arriva come
+    # 72.30000305175781. Nessuna bilancia misura oltre il centesimo.
+    valore = round(valore, 2)
     giorno = _data(data) or date.today()
 
     misura = db.session.query(PesoCorporeo).filter_by(data=giorno).first()

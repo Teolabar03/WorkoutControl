@@ -2,18 +2,19 @@
 
 `POST /api/health/ingest` e' l'unico endpoint dell'app raggiungibile senza aver
 fatto il login: chi lo chiama e' un'app Android (HC Webhook), che una sessione
-Flask non ce l'ha e non puo' averla. Al posto del cookie usa un token fisso in
-`WORKOUT_INGEST_TOKEN`, e per questo qui i controlli sono piu' stretti che
-altrove: token assente in configurazione vuol dire endpoint spento, non
-endpoint aperto.
+Flask non ce l'ha e non puo' averla. Al posto del cookie usa il token del
+workout a cui vanno i dati (Workout.ingest_token), e per questo qui i controlli
+sono piu' stretti che altrove: nessun token configurato vuol dire endpoint
+spento, non endpoint aperto.
 """
 
-import os
 import secrets
 from datetime import date, timedelta
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, g, request
 
+import tenancy
+from models import Workout, db
 from schemas import ApiError, api_ok
 from services import salute
 from services.samsung_export import ErroreImport, importa_export
@@ -32,8 +33,21 @@ GIORNI_DEFAULT = 30
 MAX_EXPORT_BYTE = 300 * 1024 * 1024
 
 
-def _token_configurato():
-    return (os.environ.get("WORKOUT_INGEST_TOKEN") or "").strip()
+def _workout_da_token():
+    """Il workout del token ricevuto, e se almeno un workout ne ha uno.
+
+    Ogni workout ha il suo token ed e' lui a dire di chi sono i dati. I token si
+    confrontano tutti, a tempo costante e senza fermarsi al primo che
+    corrisponde: il tempo di risposta non deve dire quanto ci si e' andati vicini.
+    """
+    candidati = [c.encode() for c in _token_ricevuti()]
+    con_token = db.session.query(Workout).filter(Workout.ingest_token.isnot(None)).all()
+    trovato = None
+    for workout in con_token:
+        atteso = workout.ingest_token.encode()
+        if any(secrets.compare_digest(c, atteso) for c in candidati):
+            trovato = workout
+    return trovato, bool(con_token)
 
 
 @bp.post("/health/ingest")
@@ -43,15 +57,15 @@ def ingest_route():
     Risponde 200 anche quando non c'e' niente da salvare: l'app ponte considera
     un errore qualsiasi risposta non 2xx e la riproverebbe a ogni ciclo.
     """
-    atteso = _token_configurato()
-    if not atteso:
+    workout, configurato = _workout_da_token()
+    if not configurato:
         raise ApiError(
             "INGEST_DISABILITATO",
-            "Sincronizzazione non configurata: manca WORKOUT_INGEST_TOKEN.",
+            "Sincronizzazione non configurata: nessun workout ha un token.",
             503,
         )
 
-    if not _token_valido(atteso):
+    if workout is None:
         # Il rifiuto va spiegato: dall'altra parte c'e' un'app di terze parti
         # configurata a mano, e "401" da solo non dice se l'header manca o se il
         # token e' sbagliato. Si annotano i NOMI degli header, mai i valori.
@@ -66,6 +80,9 @@ def ingest_route():
             "'Authorization: Bearer <token>' oppure 'X-Ingest-Token: <token>'.",
             401,
         )
+
+    # Da qui in poi letture e scritture riguardano solo il workout del token.
+    tenancy.imposta(workout.id)
 
     if (request.content_length or 0) > MAX_PAYLOAD_BYTE:
         raise ApiError("PAYLOAD_TROPPO_GRANDE", "Payload troppo grande.", 413)
@@ -93,7 +110,7 @@ def ingest_route():
     return api_ok(conteggi)
 
 
-def _token_valido(atteso):
+def _token_ricevuti():
     """Il token, accettato in tutte le forme che le app di webhook producono.
 
     HC Webhook fa scrivere nome e valore dell'header in due campi separati, e
@@ -110,7 +127,7 @@ def _token_valido(atteso):
         valore = (request.headers.get(nome) or "").strip()
         if valore:
             candidati.append(valore)
-    return any(secrets.compare_digest(c, atteso) for c in candidati)
+    return candidati
 
 
 @bp.post("/salute/import")
@@ -189,11 +206,28 @@ def stato_salute_route():
     # passare la richiesta, quindi e' l'unico posto da cui ricostruire l'URL
     # completo da incollare nell'app del telefono.
     prefisso = (current_app.config.get("SESSION_COOKIE_PATH") or "/").rstrip("/")
+    workout = g.utente.workout
     return api_ok(
         {
-            "ingest_attivo": bool(_token_configurato()),
+            "ingest_attivo": bool(workout.ingest_token),
+            # Il token serve a configurare il telefono: lo vede chi puo'
+            # scrivere nel workout, non l'allenatore.
+            "token": workout.ingest_token if g.utente.puo_scrivere else None,
             "collegata": salute.ci_sono_dati(),
             "url_webhook": request.url_root.rstrip("/") + prefisso + "/api/health/ingest",
             **salute.ultimo_aggiornamento(),
         }
     )
+
+
+@bp.post("/salute/token")
+def genera_token_route():
+    """Nuovo token di sincronizzazione per il workout dell'utenza.
+
+    Il vecchio smette subito di funzionare: e' anche il modo di chiudere fuori
+    un telefono che non si usa piu'.
+    """
+    workout = g.utente.workout
+    workout.genera_token()
+    db.session.commit()
+    return api_ok({"token": workout.ingest_token})

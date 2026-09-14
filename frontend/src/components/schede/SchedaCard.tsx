@@ -9,11 +9,13 @@ export function SchedaCard({
   onAvvia,
   onDuplica,
   avvioInCorso,
+  solaLettura,
 }: {
   scheda: Scheda
   onAvvia: () => void
   onDuplica: () => void
   avvioInCorso?: boolean
+  solaLettura?: boolean
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
@@ -24,7 +26,12 @@ export function SchedaCard({
         {!scheda.attiva && <Badge variant="outline">Archiviata</Badge>}
       </div>
 
-      {scheda.obiettivo && <Badge variant="secondary" className="w-fit">{scheda.obiettivo}</Badge>}
+      {(scheda.obiettivo || scheda.riscaldamento) && (
+        <div className="flex flex-wrap gap-1.5">
+          {scheda.obiettivo && <Badge variant="secondary">{scheda.obiettivo}</Badge>}
+          {scheda.riscaldamento && <Badge variant="outline">Riscaldamento</Badge>}
+        </div>
+      )}
 
       {scheda.descrizione && (
         <p className="line-clamp-2 text-sm text-muted-foreground">{scheda.descrizione}</p>
@@ -35,15 +42,19 @@ export function SchedaCard({
       </p>
 
       <div className="mt-auto flex gap-2 pt-1">
-        <Button size="sm" onClick={onAvvia} disabled={avvioInCorso} className="flex-1">
-          <Play className="size-4" /> Avvia
-        </Button>
-        <Button size="sm" variant="outline" asChild>
+        {!solaLettura && (
+          <Button size="sm" onClick={onAvvia} disabled={avvioInCorso} className="flex-1">
+            <Play className="size-4" /> Avvia
+          </Button>
+        )}
+        <Button size="sm" variant="outline" asChild className={solaLettura ? "flex-1" : undefined}>
           <Link to={`/schede/${scheda.id}`}>Apri</Link>
         </Button>
-        <Button size="sm" variant="outline" onClick={onDuplica} aria-label="Duplica scheda">
-          <Copy className="size-4" />
-        </Button>
+        {!solaLettura && (
+          <Button size="sm" variant="outline" onClick={onDuplica} aria-label="Duplica scheda">
+            <Copy className="size-4" />
+          </Button>
+        )}
       </div>
     </div>
   )

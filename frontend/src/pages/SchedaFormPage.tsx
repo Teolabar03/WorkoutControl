@@ -21,6 +21,7 @@ export function SchedaFormPage() {
   const [obiettivo, setObiettivo] = useState("")
   const [descrizione, setDescrizione] = useState("")
   const [attiva, setAttiva] = useState(true)
+  const [riscaldamento, setRiscaldamento] = useState(false)
 
   useEffect(() => {
     if (scheda) {
@@ -28,6 +29,7 @@ export function SchedaFormPage() {
       setObiettivo(scheda.obiettivo)
       setDescrizione(scheda.descrizione)
       setAttiva(scheda.attiva)
+      setRiscaldamento(scheda.riscaldamento)
     }
   }, [scheda])
 
@@ -37,12 +39,12 @@ export function SchedaFormPage() {
 
     if (schedaId) {
       modifica.mutate(
-        { nome, obiettivo, descrizione, attiva },
+        { nome, obiettivo, descrizione, attiva, riscaldamento },
         { onSuccess: () => navigate(`/schede/${schedaId}`) }
       )
     } else {
       crea.mutate(
-        { nome, obiettivo, descrizione },
+        { nome, obiettivo, descrizione, riscaldamento },
         { onSuccess: (nuova) => navigate(`/schede/${nuova.id}`) }
       )
     }
@@ -76,6 +78,20 @@ export function SchedaFormPage() {
             onChange={(e) => setDescrizione(e.target.value)}
           />
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={riscaldamento}
+            onChange={(e) => setRiscaldamento(e.target.checked)}
+            className="mt-0.5 size-4 rounded border-border accent-primary"
+          />
+          <span>
+            Scheda di riscaldamento
+            <span className="block text-xs text-muted-foreground">
+              Le serie fatte con questa scheda non contano per PR, volume e progressione.
+            </span>
+          </span>
+        </label>
         {schedaId && (
           <label className="flex items-center gap-2 text-sm">
             <input

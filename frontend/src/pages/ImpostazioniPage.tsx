@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { Link } from "react-router-dom"
+import { ChevronRight, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,20 +18,25 @@ import {
 import { useCambiaModello, useModelliAi, useAvviaOllama, useStatoOllama } from "@/hooks/useChat"
 import { useCambiaModelloOllama, useImpostazioni, useModificaImpostazioni } from "@/hooks/useImpostazioni"
 import { useAppContext } from "@/hooks/useAppContext"
+import { usePermessi } from "@/hooks/useAuth"
+import { AccountCard } from "@/components/impostazioni/AccountCard"
 import { SamsungHealthCard } from "@/components/impostazioni/SamsungHealthCard"
 import { ObiettiviCard } from "@/components/impostazioni/ObiettiviCard"
 import { VersioneAppCard } from "@/components/impostazioni/VersioneAppCard"
 import { ServerCard } from "@/components/impostazioni/ServerCard"
 
 export function ImpostazioniPage() {
+  const { admin, puoScrivere } = usePermessi()
   const { data: context } = useAppContext()
   const { data: impostazioni } = useImpostazioni()
   const modifica = useModificaImpostazioni()
 
-  const { data: catalogo } = useModelliAi()
+  // Modello AI e Ollama valgono per tutta l'installazione: li gestisce l'admin,
+  // e per gli altri non vale nemmeno la pena chiederli al server.
+  const { data: catalogo } = useModelliAi(admin)
   const cambiaModello = useCambiaModello()
 
-  const { data: statoOllama } = useStatoOllama()
+  const { data: statoOllama } = useStatoOllama(admin)
   const avviaOllama = useAvviaOllama()
   const cambiaModelloOllama = useCambiaModelloOllama()
 
@@ -58,45 +65,68 @@ export function ImpostazioniPage() {
     <div className="mx-auto max-w-lg space-y-6">
       <h1 className="font-heading text-2xl font-semibold">Impostazioni</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-card p-4">
-        <h2 className="font-heading text-lg font-semibold">Preferenze</h2>
-        <div className="space-y-1.5">
-          <Label htmlFor="imp-timer">Timer di recupero di default (5-900 sec)</Label>
-          <Input id="imp-timer" inputMode="numeric" value={timer} onChange={(e) => setTimer(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="imp-n">Allenamenti recenti nel contesto AI (1-100)</Label>
-          <Input id="imp-n" inputMode="numeric" value={nSessioni} onChange={(e) => setNSessioni(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="imp-attrezzatura">Attrezzatura a disposizione</Label>
-          <Textarea
-            id="imp-attrezzatura"
-            rows={4}
-            maxLength={1000}
-            value={attrezzatura}
-            onChange={(e) => setAttrezzatura(e.target.value)}
-            placeholder="Es. due manubri da 1.5 kg, due da 0.5 kg, un elastico, un tappetino"
-          />
-          <p className="text-sm text-muted-foreground">
-            L'assistente AI la legge prima di rispondere: non ti consiglia attrezzi che non hai. Lascia vuoto se
-            preferisci che la deduca dagli esercizi in libreria.
-          </p>
-        </div>
-        <Button type="submit" disabled={modifica.isPending}>
-          Salva
-        </Button>
-      </form>
+      {admin && (
+        <Link
+          to="/impostazioni/utenze"
+          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <span className="flex items-center gap-3">
+            <Users className="size-5 shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              <span className="block font-heading text-lg font-semibold">Utenze</span>
+              <span className="block text-sm text-muted-foreground">Utenze, ruoli e workout</span>
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+      )}
 
-      <ObiettiviCard />
+      <AccountCard />
 
-      <SamsungHealthCard />
+      {/* Le preferenze sono dati del workout: l'allenatore le usa senza cambiarle. */}
+      {puoScrivere && (
+        <>
+          <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-card p-4">
+            <h2 className="font-heading text-lg font-semibold">Preferenze</h2>
+            <div className="space-y-1.5">
+              <Label htmlFor="imp-timer">Timer di recupero di default (5-900 sec)</Label>
+              <Input id="imp-timer" inputMode="numeric" value={timer} onChange={(e) => setTimer(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="imp-n">Allenamenti recenti nel contesto AI (1-100)</Label>
+              <Input id="imp-n" inputMode="numeric" value={nSessioni} onChange={(e) => setNSessioni(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="imp-attrezzatura">Attrezzatura a disposizione</Label>
+              <Textarea
+                id="imp-attrezzatura"
+                rows={4}
+                maxLength={1000}
+                value={attrezzatura}
+                onChange={(e) => setAttrezzatura(e.target.value)}
+                placeholder="Es. due manubri da 1.5 kg, due da 0.5 kg, un elastico, un tappetino"
+              />
+              <p className="text-sm text-muted-foreground">
+                L'assistente AI la legge prima di rispondere: non ti consiglia attrezzi che non hai. Lascia vuoto se
+                preferisci che la deduca dagli esercizi in libreria.
+              </p>
+            </div>
+            <Button type="submit" disabled={modifica.isPending}>
+              Salva
+            </Button>
+          </form>
+
+          <ObiettiviCard />
+
+          <SamsungHealthCard />
+        </>
+      )}
 
       <VersioneAppCard />
 
       <ServerCard />
 
-      {context?.ai_disponibile && catalogo && (
+      {admin && context?.ai_configurato && catalogo && (
         <div className="space-y-4 rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between">
             <h2 className="font-heading text-lg font-semibold">Assistente AI</h2>
@@ -131,7 +161,7 @@ export function ImpostazioniPage() {
         </div>
       )}
 
-      {statoOllama?.configurato && (
+      {admin && statoOllama?.configurato && (
         <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between">
             <h2 className="font-heading text-lg font-semibold">Ollama locale</h2>

@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { dataIt, numeroIt, parseNumeroIt } from "@/lib/format"
 import { useEliminaPeso, useNuovoPeso, usePesoElenco } from "@/hooks/usePeso"
 import { useImpostazioni, useModificaImpostazioni } from "@/hooks/useImpostazioni"
+import { usePermessi } from "@/hooks/useAuth"
 
 /** Le fasce dell'OMS, giusto per dare un senso al numero. */
 function fasciaBmi(bmi: number): string {
@@ -23,6 +24,7 @@ export function PesoPage() {
   const { data: misure } = usePesoElenco()
   const nuovoPeso = useNuovoPeso()
   const eliminaPeso = useEliminaPeso()
+  const { puoScrivere } = usePermessi()
 
   const { data: impostazioni } = useImpostazioni()
   const modificaImpostazioni = useModificaImpostazioni()
@@ -64,23 +66,32 @@ export function PesoPage() {
       <h1 className="font-heading text-2xl font-semibold">Peso e altezza</h1>
 
       <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 sm:items-end">
-        <form
-          className="space-y-1.5"
-          onSubmit={(e) => {
-            e.preventDefault()
-            salvaAltezza()
-          }}
-        >
-          <Label htmlFor="peso-altezza">Altezza (cm)</Label>
-          <Input
-            id="peso-altezza"
-            inputMode="numeric"
-            placeholder="es. 178"
-            value={altezza}
-            onChange={(e) => setAltezza(e.target.value)}
-            onBlur={salvaAltezza}
-          />
-        </form>
+        {puoScrivere ? (
+          <form
+            className="space-y-1.5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              salvaAltezza()
+            }}
+          >
+            <Label htmlFor="peso-altezza">Altezza (cm)</Label>
+            <Input
+              id="peso-altezza"
+              inputMode="numeric"
+              placeholder="es. 178"
+              value={altezza}
+              onChange={(e) => setAltezza(e.target.value)}
+              onBlur={salvaAltezza}
+            />
+          </form>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Altezza</p>
+            <p className="font-heading text-2xl font-semibold tabular-nums">
+              {altezzaCm ? `${altezzaCm} cm` : "—"}
+            </p>
+          </div>
+        )}
         <div className="space-y-1.5">
           <p className="text-sm font-medium">Indice di massa corporea</p>
           {bmi === null ? (
@@ -96,6 +107,7 @@ export function PesoPage() {
         </div>
       </div>
 
+      {puoScrivere && (
       <form
         onSubmit={handleSubmit}
         className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-4 sm:items-end"
@@ -123,6 +135,7 @@ export function PesoPage() {
           Registra peso
         </Button>
       </form>
+      )}
 
       <ChartCard titolo="Andamento" vuoto={ordinati.length === 0}>
         <LineTrendChart
@@ -144,7 +157,7 @@ export function PesoPage() {
                   <TableHead>Data</TableHead>
                   <TableHead>Peso</TableHead>
                   <TableHead>Note</TableHead>
-                  <TableHead className="w-10" />
+                  {puoScrivere && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -153,22 +166,24 @@ export function PesoPage() {
                     <TableCell>{dataIt(m.data)}</TableCell>
                     <TableCell className="tabular-nums">{numeroIt(m.valore_kg)} kg</TableCell>
                     <TableCell className="text-muted-foreground">{m.note || "—"}</TableCell>
-                    <TableCell>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Elimina misura del ${dataIt(m.data)}`}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        }
-                        titolo="Eliminare questa misura?"
-                        descrizione={`Peso del ${dataIt(m.data)}: ${numeroIt(m.valore_kg)} kg. L'operazione non è reversibile.`}
-                        onConferma={() => eliminaPeso.mutate(m.id)}
-                      />
-                    </TableCell>
+                    {puoScrivere && (
+                      <TableCell>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Elimina misura del ${dataIt(m.data)}`}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          }
+                          titolo="Eliminare questa misura?"
+                          descrizione={`Peso del ${dataIt(m.data)}: ${numeroIt(m.valore_kg)} kg. L'operazione non è reversibile.`}
+                          onConferma={() => eliminaPeso.mutate(m.id)}
+                        />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

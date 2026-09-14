@@ -39,6 +39,8 @@ export interface Scheda {
   obiettivo: string
   data_creazione: string
   attiva: boolean
+  /** Le serie fatte con questa scheda non contano per PR, volume e progressione. */
+  riscaldamento: boolean
   n_esercizi: number
   n_allenamenti: number
   esercizi?: EsercizioScheda[]
@@ -64,6 +66,7 @@ export interface NuovaScheda {
   nome: string
   descrizione?: string
   obiettivo?: string
+  riscaldamento?: boolean
 }
 
 export interface ModificaScheda {
@@ -71,6 +74,7 @@ export interface ModificaScheda {
   descrizione?: string
   obiettivo?: string
   attiva?: boolean
+  riscaldamento?: boolean
 }
 
 export interface NuovoEsercizioScheda {

@@ -66,12 +66,44 @@ def serialize_scheda(s, con_esercizi=True):
         "obiettivo": s.obiettivo,
         "data_creazione": s.data_creazione.isoformat(),
         "attiva": s.attiva,
+        "riscaldamento": bool(s.riscaldamento),
         "n_esercizi": len(s.esercizi),
         "n_allenamenti": len(s.sessioni),
     }
     if con_esercizi:
         dati["esercizi"] = [serialize_esercizio_scheda(v) for v in s.esercizi]
     return dati
+
+
+def serialize_workout(w, n_utenti=None, con_token=False):
+    dati = {
+        "id": w.id,
+        "nome": w.nome,
+        "data_creazione": w.data_creazione.isoformat(),
+        "sincronizzazione_attiva": bool(w.ingest_token),
+    }
+    if n_utenti is not None:
+        dati["n_utenti"] = n_utenti
+    # Il token e' il segreto con cui il telefono scrive nel workout: esce solo
+    # dove serve a configurarlo, non con i dati dell'utenza.
+    if con_token:
+        dati["ingest_token"] = w.ingest_token
+    return dati
+
+
+def serialize_utente(u):
+    return {
+        "id": u.id,
+        "username": u.username,
+        "ruolo": u.ruolo,
+        "ai_abilitata": u.ai_abilitata,
+        "usa_assistente": u.usa_assistente,
+        "attivo": u.attivo,
+        "admin": u.admin,
+        "puo_scrivere": u.puo_scrivere,
+        "workout": serialize_workout(u.workout),
+        "data_creazione": u.data_creazione.isoformat(),
+    }
 
 
 def serialize_serie(s):

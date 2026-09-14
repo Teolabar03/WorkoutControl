@@ -9,13 +9,16 @@ export function SortableEsercizioRow({
   voce,
   onModifica,
   onRimuovi,
+  solaLettura,
 }: {
   voce: EsercizioScheda
   onModifica: () => void
   onRimuovi: () => void
+  solaLettura?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: voce.id,
+    disabled: solaLettura,
   })
 
   const style = {
@@ -34,15 +37,17 @@ export function SortableEsercizioRow({
       style={style}
       className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2.5"
     >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-        aria-label={`Trascina per riordinare ${voce.esercizio.nome}`}
-      >
-        <GripVertical className="size-4" />
-      </button>
+      {!solaLettura && (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+          aria-label={`Trascina per riordinare ${voce.esercizio.nome}`}
+        >
+          <GripVertical className="size-4" />
+        </button>
+      )}
 
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{voce.esercizio.nome}</p>
@@ -54,12 +59,16 @@ export function SortableEsercizioRow({
         </p>
       </div>
 
-      <Button variant="ghost" size="icon-sm" onClick={onModifica} aria-label={`Modifica ${voce.esercizio.nome}`}>
-        <Pencil className="size-4" />
-      </Button>
-      <Button variant="ghost" size="icon-sm" onClick={onRimuovi} aria-label={`Rimuovi ${voce.esercizio.nome}`}>
-        <Trash2 className="size-4" />
-      </Button>
+      {!solaLettura && (
+        <>
+          <Button variant="ghost" size="icon-sm" onClick={onModifica} aria-label={`Modifica ${voce.esercizio.nome}`}>
+            <Pencil className="size-4" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={onRimuovi} aria-label={`Rimuovi ${voce.esercizio.nome}`}>
+            <Trash2 className="size-4" />
+          </Button>
+        </>
+      )}
     </li>
   )
 }

@@ -1,3 +1,5 @@
+import { numeroIt } from "@/lib/format"
+
 interface ChartTooltipProps {
   active?: boolean
   payload?: { value?: number | string }[]
@@ -12,7 +14,7 @@ export function ChartTooltip({ active, payload, label, unita }: ChartTooltipProp
     <div className="rounded-md border border-border bg-card px-3 py-2 text-xs shadow-md">
       <p className="font-medium text-foreground">{label}</p>
       <p className="text-muted-foreground">
-        {valore}
+        {typeof valore === "number" ? numeroIt(valore) : valore}
         {unita ? ` ${unita}` : ""}
       </p>
     </div>

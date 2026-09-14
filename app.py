@@ -7,12 +7,13 @@ resto serve il build statico di React (`frontend/dist`), con fallback a
 
 import os
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
-from flask import Flask, abort, request, send_from_directory, session
+from flask import Flask, abort, request, send_from_directory
 from flask_cors import CORS
 
+import tenancy
 from models import db
 from schemas import api_error, register_error_handlers
 
@@ -75,31 +76,40 @@ def create_app():
         )
 
     db.init_app(app)
+    tenancy.installa()
     register_error_handlers(app)
 
     @app.before_request
     def _richiedi_autenticazione():
-        """Protegge tutta l'API dietro il login a password singola.
+        """Protegge l'API dietro il login e fissa il workout della richiesta.
 
-        L'app gira in genere con WORKOUT_HOST=0.0.0.0 per essere raggiungibile
-        dal telefono in casa: questo la espone a chiunque sia sulla stessa
-        rete WiFi, da qui la necessita' di un accesso protetto anche per un
-        uso single-user. Le route non-API (SPA/asset statici) restano
-        pubbliche: e' il frontend a mostrare la schermata di login finche'
-        /api/auth/me non conferma la sessione.
+        Le route non-API (SPA/asset statici) restano pubbliche: e' il frontend
+        a mostrare la schermata di login finche' /api/auth/me non conferma la
+        sessione. Da qui in poi ogni query vede solo i dati del workout
+        dell'utenza (tenancy.py); prima del login non ne vede nessuno.
         """
         if not request.path.startswith("/api/"):
             return None
+        from blueprints.api.auth import carica_utente, controlla_accesso
+
+        tenancy.imposta(tenancy.NESSUN_WORKOUT)
+        utente = carica_utente()
         if request.path.startswith("/api/auth/"):
             return None
         # L'ingest dei dati di salute lo chiama un'app Android, che un cookie
-        # di sessione non ce l'ha: si autentica da sola con un token fisso
-        # (vedi blueprints/api/salute.py), quindi qui va lasciata passare.
+        # di sessione non ce l'ha: si autentica con il token del workout e il
+        # workout lo fissa da se' (vedi blueprints/api/salute.py).
         if request.path == "/api/health/ingest":
             return None
-        if not session.get("authenticated"):
+        if utente is None:
             return api_error("UNAUTHORIZED", "Accesso non autenticato.", 401)
-        return None
+        return controlla_accesso(utente)
+
+    @app.teardown_request
+    def _dimentica_contesto(_errore):
+        # I thread di gunicorn servono piu' richieste: il workout della
+        # precedente non deve restare appeso.
+        tenancy.azzera()
 
     # In dev il frontend Vite gira su :5173 e proxya /api verso questo
     # server: CORS serve solo come fallback (es. se il proxy non e' in uso).
@@ -140,17 +150,32 @@ def create_app():
         from seed import applica_seed
 
         db.create_all()
-        applica_seed()
+        applica_seed(_workout_iniziale())
         print("Seed applicato.")
 
     with app.app_context():
+        from sqlalchemy import inspect
+
         from seed import applica_seed
 
+        tabelle_prima = set(inspect(db.engine).get_table_names())
+        # Il passaggio alle utenze riscrive alcune tabelle del database
+        # esistente: prima se ne fa una copia.
+        migrazione_utenze = bool(tabelle_prima) and "workout" not in tabelle_prima
+        if migrazione_utenze:
+            _copia_di_sicurezza(percorso_db, "pre-utenze")
+
         db.create_all()
+        workout_iniziale = _workout_iniziale()
+        _ricostruisci_con_workout(workout_iniziale)
         colonne_nuove = _allinea_schema()
+        if migrazione_utenze:
+            _assegna_workout_iniziale(workout_iniziale)
         if ("pr", "peso_kg") in colonne_nuove:
             _ripristina_pr_peso_kg()
-        applica_seed()
+        _crea_admin_iniziale(workout_iniziale)
+        _arrotonda_pesi_corporei()
+        applica_seed(workout_iniziale)
 
     return app
 
@@ -179,6 +204,163 @@ def _secret_key(instance_path):
     with open(percorso, "w", encoding="utf-8") as f:
         f.write(chiave)
     return chiave
+
+
+def _copia_di_sicurezza(percorso_db, motivo):
+    """Copia del database prima di una migrazione che riscrive delle tabelle.
+
+    Sulla VPS quel file e' l'unica copia buona dei dati (vedi CLAUDE.md): se la
+    migrazione andasse storta, basta rimettere questa al suo posto. Si usa
+    l'API di backup di SQLite e non una copia del file, che con una scrittura
+    in corso potrebbe venire incoerente.
+    """
+    import sqlite3
+
+    if not os.path.isfile(percorso_db):
+        return
+    destinazione = f"{percorso_db}.{motivo}-{datetime.now():%Y%m%d-%H%M%S}.bak"
+    sorgente = sqlite3.connect(percorso_db)
+    copia = sqlite3.connect(destinazione)
+    try:
+        sorgente.backup(copia)
+    finally:
+        copia.close()
+        sorgente.close()
+    print(f"schema: copia di sicurezza in {destinazione}")
+
+
+def _workout_iniziale():
+    """Il primo workout, creato al primo avvio con le utenze.
+
+    Eredita WORKOUT_INGEST_TOKEN da .env, cosi' il telefono gia' configurato
+    continua a sincronizzare senza toccarlo.
+    """
+    from models import Workout
+
+    workout = db.session.query(Workout).order_by(Workout.id).first()
+    if workout is None:
+        token = (os.environ.get("WORKOUT_INGEST_TOKEN") or "").strip() or None
+        workout = Workout(nome="Principale", ingest_token=token)
+        db.session.add(workout)
+        db.session.commit()
+    return workout.id
+
+
+# Tabelle il cui vincolo di unicita' ora comprende il workout.
+TABELLE_DA_RICOSTRUIRE = (
+    "impostazione",
+    "peso_corporeo",
+    "sonno_notte",
+    "pasto_nutrizione",
+    "misura_salute",
+)
+
+
+def _ricostruisci_con_workout(workout_id):
+    """Riscrive le tabelle con un vincolo di unicita' che ora vale per workout.
+
+    Un peso al giorno, una notte per orario di inizio, un'impostazione per
+    chiave: con piu' workout valgono per workout, non per tutta l'app. SQLite
+    non sa cambiare un vincolo su una tabella esistente, quindi si crea la
+    tabella nuova, ci si copiano le righe assegnandole al workout iniziale e si
+    butta la vecchia. Gira una volta sola: dopo, la colonna workout_id c'e'.
+    """
+    from sqlalchemy import inspect, text
+
+    from models import Impostazione
+
+    inspector = inspect(db.engine)
+    presenti = set(inspector.get_table_names())
+    for nome in TABELLE_DA_RICOSTRUIRE:
+        if nome not in presenti:
+            continue
+        colonne = [c["name"] for c in inspector.get_columns(nome)]
+        if "workout_id" in colonne:
+            continue
+
+        tabella = db.metadata.tables[nome]
+        indici = [i["name"] for i in inspector.get_indexes(nome)]
+        vecchia = f"{nome}__pre_utenze"
+        comuni = ", ".join(f'"{c}"' for c in colonne if c in tabella.c)
+        if nome == "impostazione":
+            # Le chiavi globali restano senza workout: vedi Impostazione.GLOBALI.
+            globali = ", ".join(f"'{c}'" for c in sorted(Impostazione.GLOBALI))
+            valore_workout = f"CASE WHEN chiave IN ({globali}) THEN NULL ELSE :workout END"
+        else:
+            valore_workout = ":workout"
+
+        db.session.execute(text(f'ALTER TABLE "{nome}" RENAME TO "{vecchia}"'))
+        # Gli indici seguono la tabella rinominata ma tengono il nome: senza
+        # toglierli, quelli della tabella nuova andrebbero in conflitto.
+        for indice in indici:
+            db.session.execute(text(f'DROP INDEX IF EXISTS "{indice}"'))
+        tabella.create(db.session.connection())
+        db.session.execute(
+            text(
+                f'INSERT INTO "{nome}" ({comuni}, workout_id) '
+                f'SELECT {comuni}, {valore_workout} FROM "{vecchia}"'
+            ),
+            {"workout": workout_id},
+        )
+        db.session.execute(text(f'DROP TABLE "{vecchia}"'))
+        db.session.commit()
+        print(f"schema: tabella {nome} riscritta con il workout")
+
+
+def _assegna_workout_iniziale(workout_id):
+    """Una tantum, al passaggio alle utenze: i dati che c'erano vanno al primo workout."""
+    from sqlalchemy import text
+
+    from models import DatiWorkout
+
+    for mapper in db.Model.registry.mappers:
+        if not issubclass(mapper.class_, DatiWorkout):
+            continue
+        tabella = mapper.class_.__tablename__
+        db.session.execute(
+            text(f'UPDATE "{tabella}" SET workout_id = :workout WHERE workout_id IS NULL'),
+            {"workout": workout_id},
+        )
+        db.session.execute(
+            text(f'CREATE INDEX IF NOT EXISTS "ix_{tabella}_workout_id" ON "{tabella}" (workout_id)')
+        )
+    db.session.commit()
+    print("schema: dati esistenti assegnati al workout iniziale")
+
+
+def _crea_admin_iniziale(workout_id):
+    """Il primo admin, da WORKOUT_USERNAME e WORKOUT_PASSWORD di .env.
+
+    Serve solo quando di utenze non ce n'e' nessuna (prima installazione, o
+    passaggio dal vecchio login a password unica): da li' in poi le utenze si
+    gestiscono dall'app. Le conversazioni gia' salvate diventano sue.
+    """
+    from sqlalchemy import text
+
+    from models import RUOLO_ADMIN, Utente
+
+    if db.session.query(Utente.id).first() is not None:
+        return
+    password = os.environ.get("WORKOUT_PASSWORD", "")
+    if not password:
+        print("utenze: nessuna utenza e WORKOUT_PASSWORD vuota, primo admin non creato")
+        return
+
+    admin = Utente(
+        username=os.environ.get("WORKOUT_USERNAME", "admin"),
+        ruolo=RUOLO_ADMIN,
+        ai_abilitata=True,
+        workout_id=workout_id,
+    )
+    admin.imposta_password(password)
+    db.session.add(admin)
+    db.session.flush()
+    db.session.execute(
+        text("UPDATE conversazione SET utente_id = :utente WHERE utente_id IS NULL"),
+        {"utente": admin.id},
+    )
+    db.session.commit()
+    print(f"utenze: creato l'admin «{admin.username}»")
 
 
 def _allinea_schema():
@@ -211,6 +393,27 @@ def _allinea_schema():
             aggiunte.add((tabella.name, colonna.name))
 
     return aggiunte
+
+
+def _arrotonda_pesi_corporei():
+    """Pulisce i pesi importati da Samsung Health prima dell'arrotondamento.
+
+    Arrivavano come float a 32 bit (72.30000305175781) e l'app li mostrava con
+    tutte le cifre. Adesso `registra_peso_corporeo` arrotonda al centesimo, ma
+    le righe gia' salvate restano sporche: si sistemano qui. Idempotente e
+    senza effetti quando non c'e' niente da correggere, quindi gira a ogni avvio.
+    """
+    from sqlalchemy import text
+
+    corrette = db.session.execute(
+        text(
+            "UPDATE peso_corporeo SET valore_kg = ROUND(valore_kg, 2) "
+            "WHERE valore_kg != ROUND(valore_kg, 2)"
+        )
+    ).rowcount
+    db.session.commit()
+    if corrette:
+        print(f"schema: arrotondati {corrette} pesi corporei al centesimo")
 
 
 def _ripristina_pr_peso_kg():
