@@ -3,6 +3,7 @@ instance/
 # Note di lavoro locali: descrivono anche il deploy (indirizzo del server,
 # percorsi, configurazione), che su un repo pubblico e' meglio non pubblicare.
 CLAUDE.md
+AGENTS.md
 .claude/
 __pycache__/
 *.py[cod]
