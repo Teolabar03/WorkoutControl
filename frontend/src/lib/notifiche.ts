@@ -12,7 +12,7 @@
 // momento in cui devono scattare, non quando quel momento arriva: se l'app nel
 // frattempo viene uccisa non c'è più nessun JavaScript a farle partire.
 
-import { Capacitor } from "@capacitor/core"
+import { Capacitor, registerPlugin } from "@capacitor/core"
 import { LocalNotifications } from "@capacitor/local-notifications"
 
 /** Id delle notifiche, uno per tipo.
@@ -40,11 +40,65 @@ export interface NotificaProgrammata {
   corpo: string
   /** Istante in cui deve scattare. */
   quando: Date
+  /** Canale su cui esce, quindi il suono che fa. Di default quello di base. */
+  canale?: string
 }
 
 /** Vero solo dentro l'APK: da browser Capacitor riporta la piattaforma "web". */
 export function disponibile(): boolean {
   return Capacitor.isNativePlatform()
+}
+
+// --- Suoni personalizzati ---------------------------------------------------
+//
+// Il suono di una notifica Android lo decide il canale, e il plugin delle
+// notifiche sa creare canali solo con suoni impacchettati nell'APK (res/raw).
+// Un suono caricato da Impostazioni arriva a runtime, quindi passa da un
+// plugin nostro (SuoniNotificaPlugin.java nel progetto Android) che salva il
+// file nella memoria dell'app e crea un canale apposta per quel suono: dato
+// che Android non lascia cambiare il suono di un canale esistente, il canale
+// prende il nome dall'impronta del file.
+//
+// Un APK precedente al plugin non lo registra: lì si resta sul canale di base.
+
+interface SuoniNotificaPlugin {
+  preparaCanale(opzioni: { nome: string; contenuto: string; estensione: string }): Promise<{ canale: string }>
+}
+
+const SuoniNotifica = registerPlugin<SuoniNotificaPlugin>("SuoniNotifica")
+
+/** Vero se l'APK in uso sa far suonare alle notifiche un suono caricato. */
+export function suoniPersonalizzatiNativi(): boolean {
+  return disponibile() && Capacitor.isPluginAvailable("SuoniNotifica")
+}
+
+export interface SuonoCanale {
+  nome: string
+  /** Il file in base64. */
+  contenuto: string
+  estensione: string
+}
+
+// Il file passa dal bridge a ogni recupero avviato: ricordare l'ultimo canale
+// preparato evita di rispedirlo quando il suono non è cambiato.
+let canalePreparato: { contenuto: string; canale: string } | null = null
+
+/** Il canale da usare per l'avviso di fine recupero con questo suono.
+ *  Non fallisce mai: nel dubbio torna il canale di base, che suona comunque. */
+export async function canaleRecupero(suono: SuonoCanale | null | undefined): Promise<string> {
+  if (!suono || !suoniPersonalizzatiNativi()) return CANALE
+  if (canalePreparato?.contenuto === suono.contenuto) return canalePreparato.canale
+  try {
+    const { canale } = await SuoniNotifica.preparaCanale({
+      nome: suono.nome,
+      contenuto: suono.contenuto,
+      estensione: suono.estensione,
+    })
+    canalePreparato = { contenuto: suono.contenuto, canale }
+    return canale
+  } catch {
+    return CANALE
+  }
 }
 
 // Permessi e canale servono una volta sola per avvio dell'app, ma la prima
@@ -89,7 +143,7 @@ export function inizializza(): Promise<boolean> {
 }
 
 /** Programma una notifica. Silenziosamente ignorata su web. */
-export async function programma({ id, titolo, corpo, quando }: NotificaProgrammata): Promise<void> {
+export async function programma({ id, titolo, corpo, quando, canale }: NotificaProgrammata): Promise<void> {
   if (!disponibile()) return
   if (!(await inizializza())) return
 
@@ -100,7 +154,7 @@ export async function programma({ id, titolo, corpo, quando }: NotificaProgramma
           id,
           title: titolo,
           body: corpo,
-          channelId: CANALE,
+          channelId: canale ?? CANALE,
           // allowWhileIdle sveglia il telefono anche in Doze: senza, un
           // recupero avviato e messo in tasca suonerebbe quando il sistema
           // decide, cioè potenzialmente minuti dopo.

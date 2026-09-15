@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { NOTIFICA, annulla, disponibile, programma } from "@/lib/notifiche"
+import { useImpostazioni } from "@/hooks/useImpostazioni"
+import { useSuono } from "@/hooks/useSuoni"
+import { NOTIFICA, annulla, canaleRecupero, disponibile, programma } from "@/lib/notifiche"
+import { beep, creaAudioContext, decodificaSuono, riproduciBuffer } from "@/lib/suoni"
 
 /**
  * Timer di recupero fedele 1:1 a static/js/sessione.js: non decrementa un
@@ -14,6 +17,10 @@ import { NOTIFICA, annulla, disponibile, programma } from "@/lib/notifiche"
  * Dentro l'APK (vedi lib/notifiche.ts) l'avviso passa quindi da una notifica
  * di sistema programmata all'avvio del recupero, che scatta anche se l'app nel
  * frattempo viene chiusa. Su web non cambia niente.
+ *
+ * Il suono è quello scelto in Impostazioni: da browser lo suona l'AudioContext,
+ * nell'APK il canale della notifica. Finché il file non è arrivato, o se non si
+ * lascia decodificare, resta il suono di base.
  */
 export function useRestTimer(sessioneId: number) {
   const chiave = `workout.timer.${sessioneId}`
@@ -27,12 +34,38 @@ export function useRestTimer(sessioneId: number) {
   const audioCtxRef = useRef<AudioContext | null>(null)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
+  const { data: impostazioni } = useImpostazioni()
+  const { data: suono } = useSuono(impostazioni?.suono_recupero)
+  const suonoRef = useRef(suono)
+  const bufferRef = useRef<{ id: number; buffer: AudioBuffer } | null>(null)
+
   const fineSalvata = useCallback((): number | null => {
     const grezzo = localStorage.getItem(chiave)
     if (!grezzo) return null
     const fine = parseInt(grezzo, 10)
     return Number.isFinite(fine) ? fine : null
   }, [chiave])
+
+  /** Decodifica in anticipo il suono scelto, appena ci sono sia il file sia
+   *  l'AudioContext: arrivano in ordine sparso, quindi la chiamano entrambi. */
+  const caricaBuffer = useCallback(() => {
+    const ctx = audioCtxRef.current
+    const scelto = suonoRef.current
+    if (!ctx || !scelto || bufferRef.current?.id === scelto.id) return
+    decodificaSuono(ctx, scelto.contenuto).then(
+      (buffer) => {
+        if (suonoRef.current?.id === scelto.id) bufferRef.current = { id: scelto.id, buffer }
+      },
+      () => {
+        // File che il browser non sa leggere: resta il bip.
+      }
+    )
+  }, [])
+
+  useEffect(() => {
+    suonoRef.current = suono
+    caricaBuffer()
+  }, [suono, caricaBuffer])
 
   // --- Audio: iOS/Chrome bloccano l'AudioContext finché l'utente non
   // interagisce con la pagina, quindi lo creiamo/sblocchiamo al primo tap.
@@ -41,39 +74,24 @@ export function useRestTimer(sessioneId: number) {
       if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume()
       return
     }
-    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!Ctor) return
-    try {
-      audioCtxRef.current = new Ctor()
-      if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume()
-    } catch {
-      audioCtxRef.current = null
-    }
-  }, [])
+    audioCtxRef.current = creaAudioContext()
+    if (audioCtxRef.current?.state === "suspended") audioCtxRef.current.resume()
+    caricaBuffer()
+  }, [caricaBuffer])
 
   useEffect(() => {
     document.addEventListener("pointerdown", preparaAudio)
     return () => document.removeEventListener("pointerdown", preparaAudio)
   }, [preparaAudio])
 
-  const beep = useCallback(() => {
+  const suona = useCallback(() => {
     const audioCtx = audioCtxRef.current
     if (!audioCtx) return
     if (audioCtx.state === "suspended") audioCtx.resume()
-    // Tre bip brevi, abbastanza acuti da sentirsi con lo schermo in tasca.
-    ;[0, 0.28, 0.56].forEach((ritardo) => {
-      const osc = audioCtx.createOscillator()
-      const gain = audioCtx.createGain()
-      const inizio = audioCtx.currentTime + ritardo
-      osc.type = "sine"
-      osc.frequency.setValueAtTime(880, inizio)
-      gain.gain.setValueAtTime(0.001, inizio)
-      gain.gain.exponentialRampToValueAtTime(0.35, inizio + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.001, inizio + 0.2)
-      osc.connect(gain).connect(audioCtx.destination)
-      osc.start(inizio)
-      osc.stop(inizio + 0.22)
-    })
+    const scelto = suonoRef.current
+    const caricato = bufferRef.current
+    if (scelto && caricato?.id === scelto.id) riproduciBuffer(audioCtx, caricato.buffer)
+    else beep(audioCtx)
   }, [])
 
   const vibra = useCallback(() => {
@@ -132,29 +150,31 @@ export function useRestTimer(sessioneId: number) {
     if (!suonatoRef.current) {
       suonatoRef.current = true
       // Nell'APK ci pensa la notifica di sistema, che Android fa scattare
-      // anche ad app in primo piano: rifare qui bip e vibrazione vorrebbe
+      // anche ad app in primo piano: rifare qui suono e vibrazione vorrebbe
       // dire avvisare due volte.
       if (!disponibile()) {
-        beep()
+        suona()
         vibra()
         notifica()
       }
     }
-  }, [fineSalvata, beep, vibra, notifica])
+  }, [fineSalvata, suona, vibra, notifica])
 
   /** Sposta la notifica di sistema alla nuova fine del recupero.
    *
    *  Annulla sempre prima di riprogrammare: `avvia` viene richiamata anche a
    *  timer già in corso — basta registrare un'altra serie — e resterebbe in
-   *  coda l'avviso del recupero precedente. */
+   *  coda l'avviso del recupero precedente. Il canale si prepara in parallelo:
+   *  è lui a decidere il suono. */
   const riprogrammaAvviso = useCallback((fine: number) => {
     if (!disponibile()) return
-    annulla(NOTIFICA.recuperoTimer).then(() =>
+    Promise.all([canaleRecupero(suonoRef.current), annulla(NOTIFICA.recuperoTimer)]).then(([canale]) =>
       programma({
         id: NOTIFICA.recuperoTimer,
         titolo: "Recupero finito",
         corpo: "Vai con la prossima serie.",
         quando: new Date(fine),
+        canale,
       })
     )
   }, [])

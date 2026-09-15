@@ -16,6 +16,8 @@ export interface Impostazioni {
    *  Qui 0 non vuol dire "non impostata" ma "nessuna tolleranza". */
   target_tolleranza_pct: number
   attrezzatura_disponibile: string
+  /** Id del suono di fine recupero (vedi api/suoni.ts); null = suono di base. */
+  suono_recupero: number | null
 }
 
 export type ModificaImpostazioni = Partial<Impostazioni>

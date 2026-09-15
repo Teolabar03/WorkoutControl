@@ -22,6 +22,7 @@ import { usePermessi } from "@/hooks/useAuth"
 import { AccountCard } from "@/components/impostazioni/AccountCard"
 import { SamsungHealthCard } from "@/components/impostazioni/SamsungHealthCard"
 import { ObiettiviCard } from "@/components/impostazioni/ObiettiviCard"
+import { SuoniCard } from "@/components/impostazioni/SuoniCard"
 import { VersioneAppCard } from "@/components/impostazioni/VersioneAppCard"
 import { ServerCard } from "@/components/impostazioni/ServerCard"
 
@@ -115,6 +116,8 @@ export function ImpostazioniPage() {
               Salva
             </Button>
           </form>
+
+          <SuoniCard />
 
           <ObiettiviCard />
 

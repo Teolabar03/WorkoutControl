@@ -164,6 +164,9 @@ class Impostazione(db.Model):
         # sola per tutti: sono tutte "quanto posso sbagliare", e cinque campi
         # separati sarebbero cinque modi di scrivere lo stesso 10.
         "target_tolleranza_pct": "10",
+        # Id del SuonoNotifica che suona a fine recupero. Vuoto = il suono di
+        # base: i tre bip da browser, quello delle notifiche nell'APK.
+        "suono_recupero": "",
     }
 
     @staticmethod
@@ -199,6 +202,23 @@ class Impostazione(db.Model):
             row = Impostazione(chiave=chiave, workout_id=workout_id)
             db.session.add(row)
         row.valore = str(valore)
+
+
+class SuonoNotifica(DatiWorkout, db.Model):
+    """Un suono caricato da Impostazioni per l'avviso di fine recupero.
+
+    Il file sta nel database e non su disco: sono poche decine di KB, e cosi'
+    segue i dati del workout (copie, eliminazione) invece di restare orfano in
+    una cartella a parte. Vedi services/suoni.py.
+    """
+
+    __tablename__ = "suono_notifica"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(80), nullable=False)
+    mime = db.Column(db.String(40), nullable=False)
+    dati = db.Column(db.LargeBinary, nullable=False)
+    data_creazione = db.Column(db.DateTime, nullable=False, default=datetime.now)
 
 
 class EsercizioLibreria(db.Model):

@@ -10,6 +10,7 @@ from flask import Blueprint, request
 
 from models import Impostazione
 from schemas import ApiError, api_ok
+from services import suoni
 from services.ai_tools import (
     ErroreStrumento,
     imposta_attrezzatura,
@@ -41,6 +42,8 @@ def _dati():
     dati["attrezzatura_disponibile"] = (
         Impostazione.get("attrezzatura_disponibile") or ""
     )
+    # None = suono di base. I file stanno in /api/suoni.
+    dati["suono_recupero"] = suoni.id_suono_recupero()
     return dati
 
 
@@ -58,6 +61,8 @@ def modifica_impostazioni_route():
                 imposta_preferenza(chiave, corpo[chiave])
         if "attrezzatura_disponibile" in corpo:
             imposta_attrezzatura(corpo["attrezzatura_disponibile"])
+        if "suono_recupero" in corpo:
+            suoni.imposta_suono_recupero(corpo["suono_recupero"])
     except ErroreStrumento as exc:
         raise ApiError("VALIDATION_ERROR", str(exc), 422)
     return api_ok(_dati())

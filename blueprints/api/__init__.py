@@ -20,6 +20,7 @@ def register_all(app):
         schede,
         sessione,
         statistiche,
+        suoni,
         utenze,
     )
 
@@ -33,6 +34,7 @@ def register_all(app):
     app.register_blueprint(statistiche.bp_pr)
     app.register_blueprint(sessione.bp)
     app.register_blueprint(impostazioni.bp)
+    app.register_blueprint(suoni.bp)
     app.register_blueprint(chat.bp)
     app.register_blueprint(context.bp)
     app.register_blueprint(utenze.bp)
