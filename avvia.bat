@@ -22,11 +22,18 @@ if not defined PY (
     exit /b 1
 )
 
+%PY% -c "import flask, flask_sqlalchemy, flask_cors, marshmallow, dotenv, waitress" >nul 2>&1
+if errorlevel 1 (
+    echo Dipendenze mancanti: esegui prima python install.py
+    pause
+    exit /b 1
+)
+
 rem --- build del frontend, solo se manca o e' piu' vecchio dei sorgenti --
 set "NEED_BUILD=0"
 if not exist "frontend\dist\index.html" set "NEED_BUILD=1"
 set "SRC_PIU_RECENTI=no"
-if "%NEED_BUILD%"=="0" for /f "usebackq delims=" %%r in (`powershell -NoProfile -Command "$dist = (Get-Item 'frontend\dist\index.html').LastWriteTime; $newest = (Get-ChildItem -Path 'frontend\src','frontend\package.json' -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime; if ($newest -gt $dist) { 'si' } else { 'no' }"`) do set "SRC_PIU_RECENTI=%%r"
+if "%NEED_BUILD%"=="0" for /f "usebackq delims=" %%r in (`powershell -NoProfile -Command "$dist = (Get-Item 'frontend\dist\index.html').LastWriteTime; $newest = (Get-ChildItem -Path 'frontend\src','frontend\public','frontend\package.json','frontend\package-lock.json','frontend\vite.config.ts','frontend\index.html','frontend\tsconfig*.json','frontend\.env*' -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime; if ($newest -gt $dist) { 'si' } else { 'no' }"`) do set "SRC_PIU_RECENTI=%%r"
 if /i "!SRC_PIU_RECENTI!"=="si" set "NEED_BUILD=1"
 
 if "%NEED_BUILD%"=="1" (
@@ -39,8 +46,20 @@ if "%NEED_BUILD%"=="1" (
     )
     echo Compilo il frontend...
     pushd frontend
-    if not exist "node_modules" call npm install
+    call npm ci
+    if errorlevel 1 (
+        popd
+        echo Installazione frontend fallita.
+        pause
+        exit /b 1
+    )
     call npm run build
+    if errorlevel 1 (
+        popd
+        echo Build fallita. Il server non viene avviato con una build vecchia.
+        pause
+        exit /b 1
+    )
     popd
     if not exist "frontend\dist\index.html" (
         echo Build del frontend fallita: controlla i messaggi sopra.

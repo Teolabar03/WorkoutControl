@@ -16,20 +16,15 @@
 import { Capacitor } from "@capacitor/core"
 import { App } from "@capacitor/app"
 import { CapacitorUpdater } from "@capgo/capacitor-updater"
+import { canInstall, validRepository, verifyManifest, type UpdateManifest } from "./updatePolicy"
 
 // `latest` salta le prerelease, che e' come le build del branch restano fuori
 // dai dispositivi: solo una release vera raggiunge i telefoni.
-const URL_MANIFEST =
-  "https://github.com/Teolabar03/WorkoutControl/releases/latest/download/manifest.json"
-
-interface Manifest {
-  /** Versione del bundle web pubblicato. */
-  versione: string
-  bundle_url: string
-  /** versionCode dell'APK pubblicato, per capire se il nativo e' indietro. */
-  apk_version_code: number
-  apk_url: string
-}
+// Local builds and forks have no update source unless explicitly configured.
+const repository = import.meta.env.VITE_UPDATE_REPOSITORY ?? ""
+const publicKey = import.meta.env.VITE_UPDATE_PUBLIC_KEY ?? ""
+const URL_MANIFEST = validRepository(repository) && publicKey
+  ? `https://github.com/${repository}/releases/latest/download/manifest.json` : ""
 
 // Evita di riscaricare lo stesso bundle a ogni ritorno in primo piano: una
 // volta accodato resta li' fino al riavvio, e ripetere il download sarebbe
@@ -40,11 +35,12 @@ function nativo(): boolean {
   return Capacitor.isNativePlatform()
 }
 
-async function leggiManifest(): Promise<Manifest | null> {
+async function leggiManifest(): Promise<UpdateManifest | null> {
+  if (!URL_MANIFEST) return null
   try {
     const res = await fetch(URL_MANIFEST, { cache: "no-store" })
     if (!res.ok) return null
-    return (await res.json()) as Manifest
+    return await verifyManifest(await res.json(), repository, publicKey)
   } catch {
     // Offline, o release non ancora pubblicata: si riprova al giro dopo.
     return null
@@ -79,12 +75,14 @@ export async function controllaAggiornamenti(): Promise<void> {
     if (!manifest?.versione || !manifest.bundle_url) return
     if (versioneAccodata === manifest.versione) return
 
-    const attuale = await CapacitorUpdater.current()
-    if (attuale.bundle.version === manifest.versione) return
+    const [attuale, info] = await Promise.all([CapacitorUpdater.current(), App.getInfo()])
+    const currentVersion = attuale.bundle.version === "builtin" ? info.version : attuale.bundle.version
+    if (!canInstall(manifest, info.build, currentVersion)) return
 
     const bundle = await CapacitorUpdater.download({
       url: manifest.bundle_url,
       version: manifest.versione,
+      checksum: manifest.bundle_sha256,
     })
     await CapacitorUpdater.next({ id: bundle.id })
     versioneAccodata = manifest.versione

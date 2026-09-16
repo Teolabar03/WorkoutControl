@@ -39,6 +39,9 @@ def create_app():
     app.config.update(
         SQLALCHEMY_DATABASE_URI="sqlite:///" + percorso_db,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+        MAX_FORM_MEMORY_SIZE=512 * 1024,
+        MAX_FORM_PARTS=4,
         # Firma il cookie di sessione del login (vedi blueprints/api/auth.py).
         SECRET_KEY=_secret_key(app.instance_path),
         # "Ricordami": quanto resta valido il login su un dispositivo se
@@ -90,6 +93,17 @@ def create_app():
         """
         if not request.path.startswith("/api/"):
             return None
+        # Set the limit before Flask parses multipart data or JSON. JSON-only
+        # writes cannot be submitted by a cross-site HTML form. The one
+        # multipart route requires a custom header (and thus CORS preflight).
+        if request.path == "/api/salute/import":
+            request.max_content_length = 300 * 1024 * 1024
+        if request.method not in ("GET", "HEAD", "OPTIONS") and request.path != "/api/health/ingest":
+            if request.path == "/api/salute/import":
+                if request.headers.get("X-Requested-With") != "WorkoutControl":
+                    return api_error("FORBIDDEN", "Richiesta di importazione non autorizzata.", 403)
+            elif not request.is_json:
+                return api_error("UNSUPPORTED_MEDIA_TYPE", "Usa Content-Type: application/json.", 415)
         from blueprints.api.auth import carica_utente, controlla_accesso
 
         tenancy.imposta(tenancy.NESSUN_WORKOUT)
@@ -113,10 +127,22 @@ def create_app():
 
     # In dev il frontend Vite gira su :5173 e proxya /api verso questo
     # server: CORS serve solo come fallback (es. se il proxy non e' in uso).
-    origini_frontend = os.environ.get(
-        "WORKOUT_FRONTEND_ORIGIN", "http://127.0.0.1:5173,http://localhost:5173"
-    ).split(",")
-    CORS(app, resources={r"/api/*": {"origins": origini_frontend}})
+    origini_frontend = [origin.strip() for origin in os.environ.get(
+        "WORKOUT_FRONTEND_ORIGIN", ""
+    ).split(",") if origin.strip()]
+    if "*" in origini_frontend:
+        raise ValueError("WORKOUT_FRONTEND_ORIGIN richiede origini esplicite, non '*'.")
+    if origini_frontend:
+        CORS(app, resources={r"/api/*": {"origins": origini_frontend}})
+
+    @app.after_request
+    def protect_response(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     from blueprints.api import register_all as register_api_blueprints
 
@@ -346,6 +372,9 @@ def _crea_admin_iniziale(workout_id):
         print("utenze: nessuna utenza e WORKOUT_PASSWORD vuota, primo admin non creato")
         return
 
+    from blueprints.api.auth import valida_password
+    valida_password(password)
+
     admin = Utente(
         username=os.environ.get("WORKOUT_USERNAME", "admin"),
         ruolo=RUOLO_ADMIN,
@@ -447,4 +476,8 @@ if __name__ == "__main__":
     host = os.environ.get("WORKOUT_HOST", "127.0.0.1")
     port = int(os.environ.get("WORKOUT_PORT", "8456"))
     print(f"\n  WorkoutTracker → http://{host}:{port}\n")
-    app.run(host=host, port=port, debug=True)
+    if os.environ.get("WORKOUT_DEBUG", "").lower() in ("1", "true"):
+        app.run(host=host, port=port, debug=True)
+    else:
+        from waitress import serve
+        serve(app, host=host, port=port, threads=4, max_request_body_size=300 * 1024 * 1024)

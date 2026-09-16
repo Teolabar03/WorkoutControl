@@ -39,6 +39,9 @@ COL_SONNO = "com.samsung.health.sleep."
 
 # Codici delle fasi di sonno di Samsung Health.
 FASI_CODICI = {"40001": "sveglio", "40002": "leggero", "40003": "profondo", "40004": "rem"}
+MAX_CSV_BYTES = 32 * 1024 * 1024
+MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
+MAX_ZIP_ENTRIES = 10000
 
 
 class ErroreImport(Exception):
@@ -80,6 +83,8 @@ def _momento(valore, offset):
 
 def _leggi_csv(dati):
     """Le righe di un CSV dell'export, saltando la riga di metadati iniziale."""
+    if len(dati) > MAX_CSV_BYTES:
+        raise ErroreImport("CSV troppo grande: massimo 32 MB per file.")
     testo = dati.decode("utf-8-sig", errors="replace").splitlines()
     if len(testo) < 2:
         return []
@@ -93,7 +98,7 @@ def _tabelle(contenuto, nome_file):
             # Il confronto e' sul nome del dataset perche' il file porta in coda
             # il timestamp dell'export, diverso a ogni scaricamento.
             if nome_file.split("/")[-1].startswith(dataset + "."):
-                return {dataset: _leggi_csv(contenuto.read())}
+                return {dataset: _leggi_csv(contenuto.read(MAX_CSV_BYTES + 1))}
         raise ErroreImport(
             "Questo CSV non e' fra quelli che servono (sonno, peso o alimentazione)."
         )
@@ -104,15 +109,26 @@ def _tabelle(contenuto, nome_file):
         raise ErroreImport("Il file non e' uno ZIP valido ne' un CSV dell'export.")
 
     tabelle = {}
-    for voce in archivio.infolist():
-        base = voce.filename.split("/")[-1]
-        if not base.lower().endswith(".csv"):
-            continue
-        for dataset in (DATASET_SONNO, DATASET_FASI, DATASET_PESO, DATASET_PASTI):
-            # startswith col punto: senza, "...sleep." pescherebbe anche
-            # "...sleep_data." e "...sleep_stage.", che hanno colonne diverse.
-            if base.startswith(dataset + "."):
-                tabelle[dataset] = _leggi_csv(archivio.read(voce))
+    with archivio:
+        if len(archivio.infolist()) > MAX_ZIP_ENTRIES:
+            raise ErroreImport("Lo ZIP contiene troppi file.")
+        extracted_bytes = 0
+        for voce in archivio.infolist():
+            base = voce.filename.split("/")[-1]
+            if not base.lower().endswith(".csv"):
+                continue
+            for dataset in (DATASET_SONNO, DATASET_FASI, DATASET_PESO, DATASET_PASTI):
+                if base.startswith(dataset + "."):
+                    extracted_bytes += voce.file_size
+                    if voce.file_size > MAX_CSV_BYTES or extracted_bytes > MAX_EXTRACTED_BYTES:
+                        raise ErroreImport("I CSV nello ZIP superano i limiti di decompressione (32 MB per file, 100 MB totali).")
+                    if dataset in tabelle:
+                        raise ErroreImport("Lo ZIP contiene più CSV per lo stesso tipo: importa un export alla volta.")
+                    try:
+                        with archivio.open(voce) as stream:
+                            tabelle[dataset] = _leggi_csv(stream.read(MAX_CSV_BYTES + 1))
+                    except (zipfile.BadZipFile, RuntimeError, NotImplementedError) as exc:
+                        raise ErroreImport("ZIP danneggiato, cifrato o con compressione non supportata.") from exc
     if not tabelle:
         raise ErroreImport(
             "Nello ZIP non c'e' nessuno dei file attesi. Assicurati che sia "

@@ -44,7 +44,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
     ...init,
     headers: {
-      ...(multipart ? {} : { "Content-Type": "application/json" }),
+      ...(multipart ? { "X-Requested-With": "WorkoutControl" } : { "Content-Type": "application/json" }),
       ...init?.headers,
     },
   })

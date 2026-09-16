@@ -1,309 +1,208 @@
-# WorkoutTracker
+# WorkoutControl
 
-Webapp locale per tenere traccia degli allenamenti a casa. Single-user, nessun
-login, dati su SQLite in `instance/workout.db`.
+Webapp per allenamenti a casa, installabile sul proprio computer o server.
+Backend Python/Flask, frontend React/TypeScript e database SQLite persistente.
+Non serve un servizio cloud per registrare allenamenti. L'assistente AI è
+facoltativo. L'accesso richiede un account: il primo amministratore viene
+creato durante la configurazione iniziale.
 
-## Avvio
+## Prima installazione
 
-```bash
-pip install -r requirements.txt
-python app.py
+1. Installa **Python 3.11-3.13** e **Node.js 22.12 o successivo**, con npm,
+   e assicurati che siano disponibili nel terminale. Su Linux può servire
+   anche il pacchetto `python3-venv` della distribuzione.
+2. Scarica lo ZIP dei sorgenti da GitHub ed estrailo, oppure clona il repository.
+3. Apri il terminale nella cartella che contiene `app.py` ed esegui:
+
+```sh
+python install.py
 ```
 
-L'app parte su <http://127.0.0.1:8456>. Al primo avvio crea il database e ci
-carica la libreria esercizi e le due schede prese da `Schede.txt`.
+Su Linux/macOS il comando può chiamarsi `python3 install.py`.
+La procedura crea `.venv`, installa le dipendenze bloccate alle versioni
+verificate, prepara `.env`, chiede nome e password del primo admin, compila
+il frontend e inizializza il database. Richiede internet per scaricare i
+pacchetti. Ripeterla conserva le impostazioni e gli account già presenti.
+La password non viene mostrata mentre la digiti. Minimo 8 caratteri;
+preferisci una frase lunga e unica.
 
-Il frontend (React) va compilato una volta prima del primo avvio:
+Avvia quindi **`avvia.bat` su Windows**. Su Linux/macOS:
 
-```bash
+```sh
+.venv/bin/python app.py
+```
+
+Oppure attiva l'ambiente virtuale ed esegui `python app.py`.
+Apri <http://127.0.0.1:8456> e accedi con le credenziali scelte.
+Il normale avvio usa Waitress, senza debugger. Non cancellare `instance/`:
+contiene database e chiave di sessione.
+
+### Installazione manuale
+
+```sh
+python -m venv .venv
+```
+
+Attiva l'ambiente: Windows PowerShell `.venv\Scripts\Activate.ps1`,
+Windows cmd `.venv\Scripts\activate.bat`, Linux/macOS `source .venv/bin/activate`.
+Se PowerShell blocca lo script puoi usare direttamente `.venv\Scripts\python.exe`.
+
+```sh
+python -m pip install -r requirements.txt
+```
+
+Copia `.env.example` in `.env` e imposta **`WORKOUT_PASSWORD`**; opzionalmente
+imposta `WORKOUT_USERNAME` (default `admin`). Questi valori creano il primo
+admin solo quando non esiste alcuna utenza. In seguito le password si cambiano
+nell'app: modificare `.env` non reimposta un account esistente.
+
+```sh
 cd frontend
-npm install
+npm ci
 npm run build
 cd ..
 python app.py
 ```
 
-`avvia.bat` fa tutto questo da solo — compila il frontend se manca o se i
-sorgenti sono più recenti dell'ultima build, poi avvia `python app.py` — quindi
-di norma basta lanciare quello.
+`avvia.bat` ricompila il frontend se necessario e segnala dipendenze mancanti,
+ma la prima installazione va fatta con `install.py`.
+Per installazioni automatiche: `python install.py --non-interactive`, con
+`WORKOUT_PASSWORD` già nell'ambiente o in `.env`. Non scrivere password nei comandi
+salvati nella cronologia del terminale.
 
-### Sviluppo sul frontend
+## Utenti e dati
 
-Per lavorare sul frontend con hot-reload servono due processi in parallelo:
+Da **Impostazioni → Utenze** l'admin crea utenti e workout.
+Un workout è un insieme di dati: utenti dello stesso workout vedono gli stessi
+allenamenti, peso, salute e impostazioni. Per dati indipendenti crea workout
+separati. Le chat AI sono della singola utenza; la libreria esercizi è condivisa.
 
-```bash
-python app.py                 # API su :8456
-cd frontend && npm run dev    # Vite su :5173, proxy /api verso :8456
-```
+- **Admin:** usa l'app e gestisce utenti e workout.
+- **Standard:** legge e modifica i dati del proprio workout.
+- **Allenatore:** sola lettura e nessun assistente AI.
 
-Si sviluppa aprendo <http://localhost:5173>; `npm run build` genera
-`frontend/dist`, servito poi da `python app.py` da solo.
+L'assistente richiede inoltre l'abilitazione della singola utenza.
+Al primo avvio vengono caricate una libreria di esercizi casalinghi e due schede
+di esempio, già incluse in `seed.py`: non serve alcun file `Schede.txt`.
+Personalizza schede, attrezzatura e timer dalle Impostazioni.
 
-### Usarla dal telefono
+## Funzioni
 
-Copia `.env.example` in `.env` (contiene già `WORKOUT_HOST=0.0.0.0`), riavvia e
-apri `http://IP-DEL-PC:8456` dal telefono collegato alla stessa rete WiFi.
-Al primo avvio del timer concedi il permesso alle notifiche: serve a sentire la
-fine del recupero anche con lo schermo spento.
+Calendario con storico; creazione e duplicazione schede; sessioni live con
+serie, peso, ripetizioni, note e recupero; inserimento e modifica di sessioni
+passate; record personali e grafici; peso e altezza; diario dolori.
+I record vengono ricalcolati quando si corregge o elimina un allenamento.
+Per gli esercizi con due manubri il peso è quello del singolo manubrio.
 
-## Registrare un allenamento
+Samsung Health è facoltativo: da Impostazioni configura l'app ponte Health
+Connect con il token del workout, oppure importa lo storico esportato.
+Le sezioni Salute e Nutrizione compaiono quando ci sono dati. L'import accetta
+ZIP fino a 300 MB, con CSV utili fino a 32 MB ciascuno e 100 MB complessivi
+non compressi. Sul reverse proxy va consentito anche l'upload di queste dimensioni.
+Se l'import dall'APK non funziona, usa il browser.
 
-Due strade:
+## Telefono e accesso remoto
 
-- **Sessione live** — "Avvia" dal calendario o da una scheda: registri le serie
-  una a una mentre ti alleni, con timer di recupero e segnalazione dei PR.
-- **Inserimento manuale** — "Inserisci manualmente": scegli data e scheda e
-  compili tutte le serie in un colpo solo, anche per giorni passati. Le righe
-  arrivano già precompilate con i target della scheda.
+Per usare il **browser del telefono sulla stessa rete** imposta
+`WORKOUT_HOST=0.0.0.0` in `.env`, riavvia e apri `http://IP-DEL-PC:8456`.
+Consenti la porta nel firewall solo sulla rete privata. HTTP non cifra password
+e dati: per reti non fidate o accesso da internet usa HTTPS.
+Le notifiche del browser dipendono da HTTPS, permessi e gestione del risparmio
+energetico: su HTTP di rete locale e a schermo bloccato non sono garantite.
 
-Nell'inserimento manuale ogni esercizio ha:
+L'**APK Android** è un client e richiede un server **HTTPS** già configurato.
+Non sostituisce l'installazione Python. Download dalle release e istruzioni
+per compilare un proprio APK: [guida Android](docs/android.md).
 
-| Controllo | Cosa fa |
-|---|---|
-| **− / +** accanto a ripetizioni e secondi | Correggono il valore senza digitare, comodi da telefono |
-| **+ Serie** e **✕** sulla riga | Aggiungono o tolgono serie: puoi registrarne più o meno di quelle previste |
-| **Saltato** | Segna l'esercizio come non svolto, con un motivo facoltativo |
-| **Svuota** | Azzera i campi lasciando l'esercizio in elenco |
+Per un server pubblico usa un reverse proxy HTTPS e un server WSGI:
+Waitress è incluso; su Linux puoi installare separatamente gunicorn e usare,
+per esempio, `gunicorn --workers 1 --threads 4 --bind 127.0.0.1:8456 app:app`.
+Il limite dei tentativi di login è in memoria per processo: con più worker
+occorre un limitatore condiviso o sul proxy. Non esporre il debugger.
 
-"Saltato" e "Svuota" non sono la stessa cosa: **saltato viene registrato** e
-compare nel dettaglio della giornata e nel contesto dell'assistente AI, che può
-così notare un esercizio evitato spesso. Svuotare invece lascia semplicemente
-l'esercizio senza serie, senza dire perché.
+Se pubblichi sotto `/workout/`, compila impostando `VITE_BASE=/workout/` e
+configura il proxy perché rimuova quel prefisso inoltrando le richieste.
+Imposta `WORKOUT_COOKIE_PATH=/workout/`, `WORKOUT_COOKIE_SECURE=1` e
+`WORKOUT_PROXY_HOPS=1` soltanto se c'è un proxy fidato che riscrive gli header.
+Il database di un server esistente non va sostituito con quello di sviluppo.
 
-## Correggere un allenamento salvato
+## Assistente AI e privacy
 
-Nel dettaglio della giornata, il pulsante **✎ Modifica** riapre l'allenamento
-nello stesso form dell'inserimento manuale, con i valori già registrati: si
-correggono pesi, ripetizioni, note e data, si aggiungono o tolgono serie e si
-cambia lo stato "saltato". Vale per qualsiasi allenamento completato, sia
-inserito a mano sia registrato in sessione live.
+Tutti i provider sono disattivati in `.env.example`. Per abilitarne uno imposta
+`ANTHROPIC_API_KEY`, `GEMINI_API_KEY` oppure `OLLAMA_MODEL`, poi riavvia.
+Ollama richiede il servizio avviato e il modello già scaricato, ad esempio con
+`ollama pull NOME-MODELLO`. Dimensioni e requisiti dipendono dal modello scelto.
+In Impostazioni puoi scegliere il provider/modello e il numero di allenamenti
+nel contesto. Chiavi e modelli disponibili dipendono dal proprio account:
+controlla prezzi e condizioni del provider, senza presumere un piano gratuito.
 
-Salvando, i **record personali vengono ricalcolati** su tutto lo storico: se il
-peso corretto era in realtà un PR il record compare, se il PR era frutto di un
-valore sbagliato sparisce. Lo stesso succede eliminando una sessione.
+L'assistente può leggere e modificare i dati tramite strumenti. Controlla il
+riepilogo delle azioni e conserva backup: la richiesta di conferma delle azioni
+distruttive nel prompt non equivale a un'autorizzazione tecnica separata.
+Le conversazioni e le azioni eseguite restano salvate nel database.
+Con provider remoti vengono inviati anche dati come peso e note sui dolori.
+Leggi [dati e connessioni esterne](docs/privacy.md) prima di abilitarli.
 
-Sotto le serie resta "Modifica rapida", per cambiare solo durata, rating e note
-senza riaprire tutto il form.
+## Configurazione essenziale
 
-## Assistente AI (facoltativo)
-
-La sezione **Assistente AI** è una **chat**: fai domande sui tuoi allenamenti e
-l'assistente risponde vedendo le ultime sedute con serie, pesi e note, il diario
-dolori e il peso corporeo. Le conversazioni restano salvate e si rileggono nel
-tempo.
-
-### L'attrezzatura che hai in casa
-
-In *Impostazioni → Attrezzatura a disposizione* si scrive, in linguaggio
-naturale, cosa c'è davvero in casa (*"due manubri da 1,5 kg, due da 0,5 kg, un
-elastico"*). Il testo finisce nelle istruzioni dell'assistente a ogni domanda,
-così non consiglia bilancieri o macchinari che non hai e propone progressi con
-quello che c'è. Se compri qualcosa basta aggiornarlo lì — o dirglielo in chat,
-che se lo riscrive da solo.
-
-Lasciandolo vuoto, l'assistente deduce l'attrezzatura dal campo *attrezzatura*
-degli esercizi in libreria.
-
-### Cosa può fare, oltre a rispondere
-
-L'assistente non è in sola lettura: ha accesso all'app tramite una serie di
-strumenti e può **fare le cose al posto tuo**.
-
-| Ambito | Cosa può fare |
-|---|---|
-| Schede | Elencarle, leggerle, crearle, modificarle, duplicarle, archiviarle; aggiungere, cambiare e togliere esercizi |
-| Libreria | Cercare esercizi per nome, gruppo muscolare o attrezzatura; aggiungerne di nuovi |
-| Calendario | Elencare e leggere gli allenamenti, registrarne di nuovi, correggere una singola serie, spostare la data, eliminarli |
-| Peso e dolori | Registrare una misurazione, aggiungere una nota al diario |
-| Preferenze | Cambiare il timer di recupero di default, quanti allenamenti tenere nel contesto e l'attrezzatura disponibile |
-
-Esempi di richieste che ora funzionano: *"crea una scheda per la schiena con
-quello che ho in casa"*, *"le alzate laterali del 28/7 erano da 1,5 kg, non
-0,5"*, *"segna l'allenamento di ieri: stessa Sessione 1, ma solo 3 serie di
-dip"*, *"aumenta di una serie tutti gli esercizi di spinta della Sessione 2"*.
-
-**Ogni modifica ai dati viene mostrata sotto la risposta**, in un riquadro con
-la lista di cosa è cambiato, e resta salvata insieme al messaggio: rileggendo la
-conversazione mesi dopo si vede ancora cosa aveva toccato. Le letture non
-compaiono, solo le scritture.
-
-Le azioni distruttive (eliminare un allenamento o una scheda) le chiede prima;
-una scheda con allenamenti collegati viene comunque archiviata invece che
-cancellata. Se sbaglia qualcosa, tutto resta modificabile a mano dall'interfaccia
-come prima — e conviene fare ogni tanto una copia di `instance/workout.db`.
-
-Funziona con **Anthropic**, con **Gemini** o con **Ollama in locale**: basta
-configurare uno dei tre in `.env`.
-
-```
-ANTHROPIC_API_KEY=sk-ant-...     # se c'è questa, viene usata questa
-GEMINI_API_KEY=...               # altrimenti si usa Gemini
-OLLAMA_MODEL=qwen3.5:9b          # altrimenti il modello locale
-```
-
-Per Gemini vanno bene anche `GOOGLE_API_KEY` o `GEMINI_KEY`. Le chiavi si
-leggono solo dall'ambiente e non finiscono mai nel database.
-
-**Senza nessuno dei tre la sezione assistente sparisce dall'app** — voce di menu
-compresa — e tutto il resto continua a funzionare normalmente.
-
-### Scegliere il modello
-
-L'ordine qui sopra è solo il predefinito. Il modello vero e proprio si sceglie
-**dal menu nella barra della chat**, o da *Impostazioni → Assistente AI*:
-l'elenco raggruppa per provider tutti i modelli a cui le tue chiavi hanno
-accesso, chiesti ai provider stessi e non scritti in un file — appena aggiungi
-`ANTHROPIC_API_KEY` e riavvii, i modelli Claude compaiono da soli.
-
-La scelta vale dal messaggio successivo, senza riavviare, e resta anche fra una
-sessione e l'altra. `ANTHROPIC_MODEL` e `GEMINI_MODEL` in `.env` restano i
-predefiniti a cui si torna scegliendo *Automatico*.
-
-I parametri della richiesta si adattano al modello scelto: `effort` e il
-fallback lato server vengono mandati solo ai modelli Anthropic che li
-dichiarano, perché su un modello che non li supporta sarebbero un errore.
-
-### Provider locale (Ollama)
-
-Con `OLLAMA_MODEL` valorizzata e Ollama in esecuzione sul PC, l'assistente gira
-in locale: nessuna chiave, nessuna quota, e i dati di allenamento non escono
-dalla macchina. Il modello ha accesso agli stessi strumenti degli altri provider,
-quindi legge e modifica l'app allo stesso modo.
-
-Ollama fa anche da **riserva a Gemini**: se Gemini non risponde — quota
-esaurita, rete giù, errore del servizio — il turno viene rigiocato in locale.
-Succede però solo se l'assistente non aveva ancora modificato nulla: ripartire
-da capo dopo una scrittura la duplicherebbe, quindi in quel caso l'errore arriva
-a te. **Quando il turno viene rigiocato, la risposta lo dice**: sotto il testo
-compare un avviso con il motivo del fallimento remoto e il nome del modello
-locale che ha risposto al suo posto.
-
-Se il server non è raggiungibile la chat lo dice esplicitamente e **non ripiega
-sul cloud**: nessun dato parte senza che tu l'abbia deciso. Da
-*Impostazioni → Provider locale* vedi se il server è acceso e lo avvii con un
-pulsante, senza aspettare che sia un messaggio fallito a dirtelo.
-
-**La scelta del modello conta più di quanto sembri**, per due motivi che tirano
-in direzioni opposte: l'affidabilità con gli strumenti (l'assistente ne ha 24) e
-la memoria della scheda video.
-
-| Modello | Peso | Usa lo strumento | Tempo |
-|---|---|---|---|
-| `qwen3.5:9b` | 6,6 GB | 3 volte su 5 | ~5 s |
-| `qwen2.5-coder:14b` | 9,0 GB | da misurare | da misurare |
-| `qwen3-coder:30b` | 18,6 GB | 5 volte su 5 | ~17 s |
-
-Il difetto di `qwen3.5:9b` è insidioso: risponde «ho aggiunto il Plank alla
-scheda» senza aver chiamato nessuno strumento. Il campo *azioni* del messaggio
-resta vuoto — è lì che si vede cosa è stato davvero eseguito — ma il testo
-sembra convincente.
-
-Per questo, quando un turno locale finisce **senza nessuna chiamata a strumenti
-e la richiesta era di fare qualcosa** (crea, aggiungi, modifica, elimina…),
-l'app lo sollecita una volta sola, chiedendo esplicitamente di eseguire invece
-di descrivere. Costa una generazione in più e solo in quel caso; se non basta,
-sotto la risposta compare un avviso che dice che non è stato modificato niente —
-così non resta il dubbio.
-
-Il modello grande però va scelto guardando la VRAM: **quello che non entra nella
-scheda video finisce nella RAM di sistema**, e da lì la risposta rallenta di
-molto mentre il resto del computer arranca. Su una scheda da 12 GB,
-`qwen3-coder:30b` sfora di parecchio: tienilo per quando ti serve far
-*modificare* qualcosa e il PC non sta facendo altro, e usa il 9b per domande e
-analisi. Con `ollama ps` vedi la ripartizione fra GPU e CPU del modello caricato.
-
-Proprio perché conviene alternarli, i modelli installati compaiono nel menu
-della chat insieme a quelli remoti, con la loro dimensione accanto al nome. In
-*Impostazioni → Provider locale* c'è un secondo menu, con uno scopo diverso: dice
-**quale modello locale usare quando tocca a Ollama**, riserva compresa — l'unico
-modo per sceglierlo mentre a rispondere è un provider remoto. In entrambi i casi
-il modello che lascia il posto viene tolto subito dalla memoria invece di
-restarci per tutto il `keep_alive` del server, e `OLLAMA_MODEL` in `.env` resta
-il predefinito.
-
-Due famiglie da non usare qui: i **modelli di ragionamento** (`deepseek-r1` e
-simili), perché il pensiero è disattivato di proposito — vedi `OLLAMA_THINK` — ed
-è l'unica cosa per cui varrebbe la pena caricarli; e i **modelli di embedding**
-(`nomic-embed-text`), che non sono conversazionali e non compaiono utilmente nel
-menu.
-
-Altre tre cose da sapere:
-
-- Il numero di allenamenti inviati è regolabile dall'interfaccia fino a 100, ma
-  il contesto locale è limitato (`OLLAMA_NUM_CTX`, 32768 di default). Quando non
-  ci stanno tutti, **l'app scarta da sola i più vecchi** finché non rientrano:
-  senza, Ollama taglierebbe in silenzio partendo dall'inizio, cioè dalle
-  istruzioni. Sotto la risposta trovi quanti allenamenti ha visto davvero.
-- Dopo aver risposto il modello resta caricato 5 minuti, poi libera la memoria
-  (`OLLAMA_KEEP_ALIVE_CHAT`). È di proposito più corto del `OLLAMA_KEEP_ALIVE`
-  del server: la chat è un uso saltuario e non deve tenere occupati diversi GB.
-- Il "pensiero" dei modelli di ragionamento è disattivato di default: lasciato
-  libero può saturare il contesto e bloccare la chat per minuti. Si riattiva con
-  `OLLAMA_THINK=1`.
-
-### Scegliere il modello Gemini
-
-Il predefinito è `gemini-flash-latest`, l'unico incluso nel piano gratuito. Con
-un piano a pagamento puoi cambiarlo:
-
-```
-GEMINI_MODEL=gemini-pro-latest
-```
-
-Se scegli un modello non incluso nel tuo piano, la chat lo dice esplicitamente
-invece di fallire in modo oscuro.
-
-## Come sono modellati i dati
-
-Tre scelte non ovvie, dettate dagli esercizi reali in `Schede.txt`:
-
-- **Esercizi a tempo.** Il Plank si misura in secondi, non in ripetizioni: ogni
-  esercizio ha un `tipo_misura` e ogni serie può registrare ripetizioni *o*
-  durata.
-- **Esercizi senza carico.** Elastico e corpo libero non hanno kg. Il record
-  personale per questi esercizi è sulle **ripetizioni** (o sui secondi), non sul
-  peso.
-- **Peso per manubrio.** Nel campo peso si inserisce quello che c'è scritto sul
-  singolo manubrio. Ogni esercizio sa quanti manubri si impugnano
-  (`carichi_per_serie`), così il volume è `peso × manubri × ripetizioni` ed è
-  corretto anche con carichi da 0,5 kg.
-
-## Struttura
-
-```
-app.py                  factory Flask, API /api/*, catch-all SPA verso frontend/dist
-models.py               modelli SQLAlchemy
-schemas.py               envelope risposte API, validazione marshmallow
-serializers.py            dict-builder per le risposte JSON
-seed.py                  libreria esercizi e schede iniziali (da Schede.txt)
-blueprints/api/          endpoint REST, uno per risorsa
-services/                PR tracker, aggregazioni statistiche, analisi AI
-frontend/                React + TypeScript + Vite + Tailwind + shadcn/ui
-old/                     frontend Jinja/vanilla JS precedente, tenuto per riferimento
-```
-
-## Variabili d'ambiente
-
-| Variabile | Default | A cosa serve |
+| Variabile | Default | Uso |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Assistente AI via Claude (ha la precedenza) |
-| `GEMINI_API_KEY` | — | Assistente AI via Gemini (anche `GOOGLE_API_KEY` / `GEMINI_KEY`) |
-| `GEMINI_MODEL` | `gemini-flash-latest` | Modello Gemini da usare |
-| `OLLAMA_MODEL` | — | Assistente AI in locale via Ollama (ultima precedenza). Modello predefinito: da Impostazioni se ne sceglie un altro |
-| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Indirizzo del server Ollama |
-| `OLLAMA_NUM_CTX` | `32768` | Finestra di contesto del modello locale |
-| `OLLAMA_TIMEOUT` | `180` | Secondi concessi a una risposta locale |
-| `OLLAMA_KEEP_ALIVE_CHAT` | `5m` | Quanto il modello resta in memoria dopo la risposta |
-| `OLLAMA_THINK` | disattivo | Lascia "pensare" il modello locale prima di rispondere |
-| `OLLAMA_EXE` | cercato nel PATH | Percorso di `ollama.exe`, per il pulsante di avvio |
-| `WORKOUT_HOST` | `127.0.0.1` | `0.0.0.0` per accedere dal telefono |
-| `WORKOUT_PORT` | `8456` | Porta del server |
-| `WORKOUT_DB_PATH` | `instance/workout.db` | Percorso alternativo del database |
+| `WORKOUT_USERNAME` | `admin` | Primo amministratore |
+| `WORKOUT_PASSWORD` | vuota | Obbligatoria per creare il primo admin |
+| `WORKOUT_HOST` | `127.0.0.1` | Indirizzo di ascolto |
+| `WORKOUT_PORT` | `8456` | Porta |
+| `WORKOUT_DEBUG` | `0` | Debugger solo per sviluppo esplicito |
+| `WORKOUT_DB_PATH` | `instance/workout.db` | Percorso alternativo; preferisci un percorso assoluto |
+| `WORKOUT_SECRET_KEY` | generata | Firma delle sessioni; salvata in `instance/secret_key.txt` |
+| `WORKOUT_COOKIE_SECURE` | disattivo | Attivare su HTTPS |
+| `WORKOUT_COOKIE_PATH` | `/` | Prefisso pubblico |
+| `WORKOUT_PROXY_HOPS` | `0` | Numero di proxy fidati |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Host del provider locale |
 
-Le variabili si leggono all'avvio: dopo aver modificato `.env` **ferma e
-rilancia `python app.py`**. Il riavvio automatico del debugger non basta, perché
-il processo figlio eredita l'ambiente di quello vecchio.
+Vedi `.env.example` per le altre opzioni. Riavvia dopo aver cambiato `.env`.
+Le API di scrittura richiedono `Content-Type: application/json`; l'import
+multipart richiede `X-Requested-With: WorkoutControl`. L'ingest Health Connect
+usa invece il token Bearer e non richiede una sessione.
 
-## Backup
+## Backup, ripristino e aggiornamenti
 
-Tutto sta in `instance/workout.db`: copiare quel file basta come backup.
+Per un backup semplice **ferma il server** e copia `instance/` e `.env` in una
+posizione privata. Per un backup a server acceso usa l'API backup di SQLite,
+non una semplice copia del file durante le scritture. I backup contengono dati
+personali e segreti; non vanno su GitHub.
+
+Per ripristinare: ferma il server, conserva una copia della situazione attuale,
+ripristina il database del backup e la configurazione, quindi riavvia con una
+versione del codice compatibile. Ripristinare la chiave di sessione mantiene
+le sessioni; cambiarla le invalida. Prima di tornare a codice precedente dopo
+una migrazione, ripristina anche il database compatibile dal backup.
+
+Per aggiornare: fai un backup, ferma il server, scarica la nuova versione
+(o `git pull`), esegui `python install.py` e riavvia. Non sovrascrivere `.env`
+o `instance/` con quelli di un'altra installazione. Gli aggiornamenti Android
+non aggiornano automaticamente il tuo backend.
+
+Le versioni delle dipendenze Python sono fissate in `requirements.txt`;
+`requirements.in` elenca quelle dirette. Per aggiornarle risolvi in un ambiente
+pulito, rigenera il lock e prova l'installazione su Windows e Linux. Per npm
+usa `npm ci` con il lockfile versionato.
+
+## Sviluppo e verifiche
+
+Avvia `python app.py` e, in un secondo terminale, `npm run dev` da `frontend/`.
+Apri <http://localhost:5173>: Vite inoltra `/api` a Flask senza bisogno di CORS.
+Il debugger Python è facoltativo (`WORKOUT_DEBUG=1`, soltanto in sviluppo).
+
+```sh
+python -m unittest discover -s tests -v
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+I test usano database temporanei. GitHub Actions prova l'installazione da zero,
+i permessi, l'isolamento, gli upload e la verifica degli aggiornamenti, ed
+esegue una scansione dei segreti. Per segnalazioni riservate vedi [SECURITY.md](SECURITY.md).
+
+Il codice corrente è in `blueprints/api/`, `services/` e `frontend/src/`.
+`old/` contiene il frontend precedente, non utilizzato dall'app.
+La licenza con attribuzione è in [LICENSE.md](LICENSE.md).

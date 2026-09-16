@@ -28,6 +28,7 @@ on:
       - "frontend/**"
       - "mobile/**"
       - ".github/workflows/android.yml"
+      - "scripts/create-update-manifest.mjs"
   workflow_dispatch:
 
 permissions:
@@ -44,6 +45,8 @@ env:
   # nuovo, ed e' quello che Android pretende per installare un APK sopra un
   # altro. run_number cresce da solo e non torna mai indietro.
   VERSIONE: 1.0.${{ github.run_number }}
+  VITE_UPDATE_REPOSITORY: ${{ github.repository }}
+  VITE_UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
 
 jobs:
   build:
@@ -76,6 +79,14 @@ jobs:
           # errore e la build si ferma qui. Il resto dell'SDK (piattaforma,
           # build-tools) lo scarica Gradle da solo, a licenze accettate.
           packages: platform-tools
+
+      - name: Verifica configurazione pubblicazione
+        env:
+          SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: |
+          test -n "$SIGNING_KEY" && test -n "$VITE_UPDATE_PUBLIC_KEY" && test -n "$CERT_SHA256" \
+            || { echo "::error::Configura UPDATE_SIGNING_KEY, UPDATE_PUBLIC_KEY e ANDROID_CERT_SHA256 (vedi docs/android.md)"; exit 1; }
 
       - name: Build del frontend
         working-directory: frontend
@@ -110,14 +121,17 @@ jobs:
       # l'aggiornamento verrebbe rifiutato per firma non corrispondente: le
       # build di debug usano una chiave generata al volo, diversa a ogni runner.
       - name: Ricostruisci il keystore
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
           # `tr -d` toglie a capo e spazi: un secret caricato da Windows puo'
           # portarsi dietro CR o un BOM, e base64 -d fallirebbe senza dire
           # perche'. Il controllo sotto verifica che ne sia uscito un keystore
           # vero, invece di lasciare che sia Gradle a fallire piu' avanti.
-          echo "${{ secrets.ANDROID_KEYSTORE }}" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.keystore"
+          printf '%s' "$KEYSTORE" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.keystore"
           keytool -list -keystore "$RUNNER_TEMP/release.keystore" \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASS }}" > /dev/null \
+            -storepass:env KEYSTORE_PASS > /dev/null \
             || { echo "::error::keystore o password non validi (controlla i secret ANDROID_*)"; exit 1; }
 
       # Il repo si aggiorna da Windows, che non versiona il bit di esecuzione.
@@ -139,27 +153,22 @@ jobs:
       # installata" senza spiegazioni. L'impronta attesa e' quella del keystore
       # generato una volta sola: qui si controlla che sia ancora quella.
       - name: Verifica la firma
+        env:
+          CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs app-release.apk | tee firma.txt
           # apksigner stampa l'impronta senza due punti e in minuscolo, keytool
           # con i due punti: si normalizza prima di confrontare.
           tr -d ':' < firma.txt | tr 'A-Z' 'a-z' \
-            | grep -q "6023e853e38bff6a14bba344a545f49310c72ce6478858d5611450e11d057260" \
+            | grep -Fq "$(printf '%s' "$CERT_SHA256" | tr -d ':' | tr 'A-Z' 'a-z')" \
             || { echo "::error::l'APK non e' firmato con il keystore atteso: gli aggiornamenti verrebbero rifiutati"; exit 1; }
 
-      - name: Scrivi il manifest
-        run: |
-          base="https://github.com/${{ github.repository }}/releases/download/v$VERSIONE"
-          cat > manifest.json <<JSON
-          {
-            "versione": "$VERSIONE",
-            "bundle_url": "$base/web-bundle.zip",
-            "apk_version_code": ${{ github.run_number }},
-            "apk_url": "$base/app-release.apk"
-          }
-          JSON
-          cat manifest.json
+      - name: Firma il manifest
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
+        run: node scripts/create-update-manifest.mjs
 
       # Da main la release e' definitiva e diventa "latest", quella che i
       # dispositivi interrogano. Dagli altri branch resta prerelease, quindi
