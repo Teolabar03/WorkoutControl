@@ -26,6 +26,8 @@ devono essere persone fidate. Gli allenatori hanno accesso in sola lettura.
 La telemetria Capgo è disabilitata. Le build Android locali senza repository e
 chiave pubblica degli aggiornamenti non contattano GitHub automaticamente.
 Le chiavi dei provider rimangono sul server, in `.env` o nell'ambiente.
+I font Barlow sono distribuiti con la licenza SIL OFL e i crediti originali
+in `frontend/public/licenses/`, inclusi anche nelle build web e Android.
 
 I dati restano salvati finché vengono eliminati dall'app o dal responsabile
 dell'installazione; cancellare una riga non elimina copie presenti nei backup.
