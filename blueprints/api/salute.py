@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from flask import Blueprint, current_app, g, request
 
 import tenancy
+from blueprints.api.auth import freno_fallito, freno_ingresso, freno_riuscito
 from models import Workout, db
 from schemas import ApiError, api_ok
 from services import salute
@@ -57,6 +58,10 @@ def ingest_route():
     Risponde 200 anche quando non c'e' niente da salvare: l'app ponte considera
     un errore qualsiasi risposta non 2xx e la riproverebbe a ogni ciclo.
     """
+    # L'unica porta aperta senza login: chi sbaglia il token a ripetizione si
+    # becca lo stesso blocco progressivo del login (vedi auth.freno_ingresso).
+    freno = freno_ingresso("ingest")
+
     workout, configurato = _workout_da_token()
     if not configurato:
         raise ApiError(
@@ -66,6 +71,7 @@ def ingest_route():
         )
 
     if workout is None:
+        freno_fallito(freno)
         # Il rifiuto va spiegato: dall'altra parte c'e' un'app di terze parti
         # configurata a mano, e "401" da solo non dice se l'header manca o se il
         # token e' sbagliato. Si annotano i NOMI degli header, mai i valori.
@@ -80,6 +86,8 @@ def ingest_route():
             "'Authorization: Bearer <token>' oppure 'X-Ingest-Token: <token>'.",
             401,
         )
+
+    freno_riuscito(freno)
 
     # Da qui in poi letture e scritture riguardano solo il workout del token.
     tenancy.imposta(workout.id)

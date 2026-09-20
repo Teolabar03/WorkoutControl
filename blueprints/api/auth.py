@@ -99,6 +99,29 @@ def _azzera_tentativi(ip: str) -> None:
         _tentativi.pop(ip, None)
 
 
+def freno_ingresso(nome: str) -> str:
+    """Applica al chiamante lo stesso freno del login, e restituisce la chiave.
+
+    Il login non e' l'unica porta aperta su internet: l'ingest dei dati di
+    salute si autentica col token del workout e, essendo chiamato da un'app
+    Android, non passa dalla sessione. Senza freno sarebbe l'unico punto dove
+    si possono provare credenziali a ripetizione. Il contatore e' lo stesso,
+    tenuto su chiavi separate per porta d'ingresso, cosi' i tentativi falliti
+    sull'ingest non chiudono fuori chi sta facendo il login.
+    """
+    chiave = f"{nome}:{_ip_chiamante()}"
+    _verifica_blocco(chiave)
+    return chiave
+
+
+def freno_fallito(chiave: str) -> None:
+    _registra_fallimento(chiave)
+
+
+def freno_riuscito(chiave: str) -> None:
+    _azzera_tentativi(chiave)
+
+
 def _dimentica_scaduti() -> None:
     """Toglie gli IP fermi da un pezzo: senza questo il dizionario crescerebbe
     a ogni indirizzo che prova il login. Si guarda l'ultimo tentativo, non il

@@ -82,13 +82,19 @@ def _assegna(session, _contesto_flush, _istanze):
 
     from models import Conversazione, DatiWorkout
 
+    utente_id = _utente.get()
     for oggetto in session.new:
-        if isinstance(oggetto, DatiWorkout) and oggetto.workout_id is None:
+        if isinstance(oggetto, DatiWorkout):
             if workout_id == NESSUN_WORKOUT:
                 raise RuntimeError("Scrittura di dati senza workout in una richiesta non autenticata.")
+            # Si sovrascrive sempre, anche se la riga arriva con un workout
+            # gia' suo: dentro una richiesta il workout lo decide la sessione
+            # di login, mai il contenuto della richiesta. Cosi' un campo
+            # workout_id che entrasse da un payload non porterebbe la riga nel
+            # workout di qualcun altro.
             oggetto.workout_id = workout_id
-        elif isinstance(oggetto, Conversazione) and oggetto.utente_id is None:
-            oggetto.utente_id = _utente.get()
+        elif isinstance(oggetto, Conversazione) and utente_id is not None:
+            oggetto.utente_id = utente_id
 
 
 def installa():

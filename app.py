@@ -7,11 +7,14 @@ resto serve il build statico di React (`frontend/dist`), con fallback a
 
 import os
 import secrets
+import sqlite3
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from flask import Flask, abort, request, send_from_directory
 from flask_cors import CORS
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 import tenancy
 from models import db
@@ -20,6 +23,33 @@ from schemas import api_error, register_error_handlers
 load_dotenv()
 
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
+
+@event.listens_for(Engine, "connect")
+def _configura_sqlite(connessione, _record):
+    """Le tre impostazioni che SQLite non da' per scontate, a ogni connessione.
+
+    Sono per connessione, non per database (tranne WAL, che resta scritto nel
+    file), quindi vanno rimesse ogni volta: da qui l'evento invece di una
+    chiamata all'avvio.
+
+    - `journal_mode=WAL`: senza, una scrittura blocca l'intero file anche in
+      lettura. L'app ha due scrittori che non si coordinano — l'ingest orario
+      di Health Connect e chi sta registrando una serie dal telefono — e con
+      il journal classico il secondo si prende "database is locked".
+    - `busy_timeout`: se una scrittura trova comunque occupato, aspetta fino a
+      cinque secondi invece di fallire subito.
+    - `foreign_keys=ON`: SQLite li tiene spenti per compatibilita', quindi
+      finora i vincoli dichiarati nei modelli erano decorativi e cancellare una
+      riga ne lasciava altre che puntavano al nulla.
+    """
+    if not isinstance(connessione, sqlite3.Connection):
+        return
+    cursore = connessione.cursor()
+    cursore.execute("PRAGMA journal_mode=WAL")
+    cursore.execute("PRAGMA busy_timeout=5000")
+    cursore.execute("PRAGMA foreign_keys=ON")
+    cursore.close()
 
 
 def create_app():
@@ -201,6 +231,7 @@ def create_app():
             _ripristina_pr_peso_kg()
         _crea_admin_iniziale(workout_iniziale)
         _arrotonda_pesi_corporei()
+        _scollega_riferimenti_orfani()
         applica_seed(workout_iniziale)
 
     return app
@@ -443,6 +474,32 @@ def _arrotonda_pesi_corporei():
     db.session.commit()
     if corrette:
         print(f"schema: arrotondati {corrette} pesi corporei al centesimo")
+
+
+def _scollega_riferimenti_orfani():
+    """Azzera i puntatori a voci di scheda che non esistono piu'.
+
+    Finche' i vincoli erano spenti (vedi `_configura_sqlite`), togliere un
+    esercizio da una scheda lasciava le serie gia' registrate con un
+    `esercizio_scheda_id` che non puntava piu' a niente: lo storico non si
+    tocca, ma il riferimento resta appeso. Adesso che i vincoli valgono
+    davvero quelle righe vanno ripulite, altrimenti la prima modifica a una
+    di loro fallirebbe. Idempotente: a puntatori a posto non fa niente.
+    """
+    from sqlalchemy import text
+
+    scollegate = 0
+    for tabella in ("serie_eseguita", "esercizio_sessione", "esercizio_saltato"):
+        scollegate += db.session.execute(
+            text(
+                f'UPDATE "{tabella}" SET esercizio_scheda_id = NULL '
+                "WHERE esercizio_scheda_id IS NOT NULL AND esercizio_scheda_id "
+                "NOT IN (SELECT id FROM esercizio_scheda)"
+            )
+        ).rowcount
+    db.session.commit()
+    if scollegate:
+        print(f"schema: scollegate {scollegate} righe da voci di scheda non piu' esistenti")
 
 
 def _ripristina_pr_peso_kg():

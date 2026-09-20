@@ -21,8 +21,10 @@ from models import (
     EsercizioLibreria,
     EsercizioSaltato,
     EsercizioScheda,
+    EsercizioSessione,
     Impostazione,
     NotaDolore,
+    PR,
     PesoCorporeo,
     Scheda,
     SerieEseguita,
@@ -733,6 +735,23 @@ def duplica_scheda(scheda_id, nuovo_nome=None):
     }
 
 
+def _scollega_storico_da_voci(voci_ids):
+    """Stacca lo storico dalle voci di scheda che stanno per sparire.
+
+    Le serie registrate puntano alla voce della scheda per ricordare cosa era
+    previsto quel giorno, ma la voce si puo' togliere dalla scheda. Finche' i
+    vincoli di SQLite erano spenti restava un puntatore appeso; ora che valgono
+    (vedi `_configura_sqlite` in app.py) la cancellazione fallirebbe. Lo storico
+    resta dov'e': perde solo il collegamento a una voce che non esiste piu'.
+    """
+    if not voci_ids:
+        return
+    for modello in (SerieEseguita, EsercizioSessione, EsercizioSaltato):
+        db.session.query(modello).filter(
+            modello.esercizio_scheda_id.in_(voci_ids)
+        ).update({modello.esercizio_scheda_id: None}, synchronize_session=False)
+
+
 @strumento(
     "elimina_scheda",
     "Elimina una scheda. Se ha allenamenti collegati viene archiviata invece "
@@ -754,6 +773,7 @@ def elimina_scheda(scheda_id):
             "_azione": f"Archiviata scheda «{nome}» (ha allenamenti collegati)",
             "archiviata": True,
         }
+    _scollega_storico_da_voci([voce.id for voce in scheda.esercizi])
     db.session.delete(scheda)
     db.session.commit()
     return {"_azione": f"Eliminata scheda «{nome}»", "eliminata": True}
@@ -846,6 +866,7 @@ def aggiorna_esercizio_scheda(voce_id, serie_target=None, rep_target=None,
 def rimuovi_esercizio_da_scheda(voce_id):
     voce = _voce(voce_id)
     descrizione = f"{voce.esercizio.nome} dalla scheda «{voce.scheda.nome}»"
+    _scollega_storico_da_voci([voce.id])
     db.session.delete(voce)
     db.session.commit()
     return {"_azione": f"Rimosso {descrizione}", "rimosso": True}
@@ -1170,6 +1191,12 @@ def elimina_allenamento(sessione_id):
     sessione = _sessione(sessione_id)
     giorno = sessione.data
     esercizi = {s.esercizio_libreria_id for s in sessione.serie}
+    # I record personali nati in questo allenamento lo indicano ancora: vanno
+    # staccati prima, o la cancellazione urta il vincolo. Tanto `ricalcola_pr`
+    # qui sotto li riscrive comunque da zero.
+    db.session.query(PR).filter(PR.sessione_id == sessione.id).update(
+        {PR.sessione_id: None}, synchronize_session=False
+    )
     db.session.delete(sessione)
     db.session.flush()
     ricalcola_pr(esercizi)

@@ -1,38 +1,19 @@
 """API regression tests. Never use the developer's database or .env."""
 import io
 import os
-from pathlib import Path
-import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
 
-temporary = tempfile.TemporaryDirectory(prefix="workout-tests-")
-os.environ["PYTHON_DOTENV_DISABLED"] = "1"
-os.environ["WORKOUT_DB_PATH"] = str(Path(temporary.name) / "test.db")
-os.environ["WORKOUT_SECRET_KEY"] = "isolated-test-key"
-os.environ["WORKOUT_PASSWORD"] = "test-admin-password"
-os.environ["WORKOUT_USERNAME"] = "admin"
-os.environ["WORKOUT_FRONTEND_ORIGIN"] = ""
-os.environ["WORKOUT_COOKIE_SECURE"] = "0"
-os.environ["WORKOUT_COOKIE_PATH"] = "/"
-for name in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY", "OLLAMA_MODEL", "WORKOUT_INGEST_TOKEN"):
-    os.environ.pop(name, None)
+from contesto import app, db  # fissa l'ambiente isolato, va importato per primo
 
-from app import app, _crea_admin_iniziale  # noqa: E402
-from models import db, Workout, Utente, Conversazione, Scheda  # noqa: E402
-from services.samsung_export import _tabelle, ErroreImport  # noqa: E402
-import tenancy  # noqa: E402
+from app import _crea_admin_iniziale
+from models import Workout, Utente, Conversazione, Scheda
+from services.samsung_export import _tabelle, ErroreImport
+import tenancy
 
 
 class SecurityTests(unittest.TestCase):
-    @classmethod
-    def tearDownClass(cls):
-        with app.app_context():
-            db.session.remove()
-            db.engine.dispose()
-        temporary.cleanup()
-
     def setUp(self):
         tenancy.azzera()
         with app.app_context():
