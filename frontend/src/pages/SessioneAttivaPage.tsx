@@ -85,7 +85,13 @@ export function SessioneAttivaPage() {
         nota_dolore: zonaDolore.trim() ? { zona_corporea: zonaDolore.trim() } : null,
       },
       {
-        onSuccess: () => navigate(`/calendario/${sessione.data}`),
+        onSuccess: () => {
+          // Il recupero in corso non ha piu' senso ad allenamento chiuso:
+          // senza fermarlo, nell'APK la notifica gia' programmata scatterebbe
+          // comunque.
+          timer.ferma()
+          navigate(`/calendario/${sessione.data}`)
+        },
       }
     )
   }
@@ -109,7 +115,14 @@ export function SessioneAttivaPage() {
             }
             titolo="Eliminare questo allenamento?"
             descrizione="Tutte le serie registrate andranno perse. L'operazione non è reversibile."
-            onConferma={() => elimina.mutate(id, { onSuccess: () => navigate("/calendario") })}
+            onConferma={() =>
+              elimina.mutate(id, {
+                onSuccess: () => {
+                  timer.ferma()
+                  navigate("/calendario")
+                },
+              })
+            }
           />
         </div>
       </div>
