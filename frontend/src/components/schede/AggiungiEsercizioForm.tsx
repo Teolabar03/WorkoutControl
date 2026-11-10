@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { useLibreria } from "@/hooks/useSchede"
 import type { NuovoEsercizioScheda } from "@/api/schede"
 
@@ -31,18 +31,20 @@ export function AggiungiEsercizioForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 pt-2">
       <div className="min-w-[200px] flex-1">
-        <Select value={esercizioId} onValueChange={setEsercizioId}>
-          <SelectTrigger className="w-full" aria-label="Scegli esercizio da aggiungere">
-            <SelectValue placeholder="Aggiungi esercizio dalla libreria…" />
-          </SelectTrigger>
-          <SelectContent>
-            {disponibili.map((e) => (
-              <SelectItem key={e.id} value={e.id.toString()}>
-                {e.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          className="w-full"
+          aria-label="Scegli esercizio da aggiungere"
+          valore={esercizioId}
+          onChange={setEsercizioId}
+          opzioni={disponibili.map((e) => ({
+            valore: e.id.toString(),
+            etichetta: e.nome,
+            dettaglio: [e.gruppo_muscolare, e.attrezzatura].filter(Boolean).join(" · "),
+          }))}
+          segnaposto="Aggiungi esercizio dalla libreria…"
+          segnapostoRicerca="Cerca per nome, muscolo o attrezzo…"
+          testoVuoto="Nessun esercizio trovato."
+        />
       </div>
       <Input
         className="w-20"

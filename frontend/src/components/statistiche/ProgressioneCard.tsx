@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { ChartCard } from "@/components/statistiche/ChartCard"
 import { LineTrendChart } from "@/components/statistiche/LineTrendChart"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { useEserciziConDati, useProgressione } from "@/hooks/useStatistiche"
 
 export function ProgressioneCard() {
@@ -28,21 +28,17 @@ export function ProgressioneCard() {
     <ChartCard
       titolo="Progressione esercizio"
       azioni={
-        <Select
-          value={esercizioId?.toString() ?? ""}
-          onValueChange={(v) => setEsercizioId(Number(v))}
-        >
-          <SelectTrigger size="sm" className="w-[180px]" aria-label="Scegli esercizio">
-            <SelectValue placeholder="Scegli esercizio" />
-          </SelectTrigger>
-          <SelectContent>
-            {esercizi?.map((e) => (
-              <SelectItem key={e.id} value={e.id.toString()}>
-                {e.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          size="sm"
+          className="w-[180px]"
+          aria-label="Scegli esercizio"
+          valore={esercizioId?.toString() ?? ""}
+          onChange={(v) => setEsercizioId(Number(v))}
+          opzioni={(esercizi ?? []).map((e) => ({ valore: e.id.toString(), etichetta: e.nome }))}
+          segnaposto="Scegli esercizio"
+          segnapostoRicerca="Cerca esercizio…"
+          testoVuoto="Nessun esercizio trovato."
+        />
       }
       vuoto={!progressione || progressione.labels.length === 0}
     >

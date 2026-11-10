@@ -4,13 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { ManualBlockCard, type BloccoForm } from "@/components/sessione/ManualBlockCard"
 import { useSchedeElenco } from "@/hooks/useSchede"
 import { useDettaglioSessione } from "@/hooks/useSessioneAttiva"
@@ -166,22 +160,17 @@ export function SessioneManualePage() {
           </div>
           <div className="col-span-2 space-y-1.5">
             <Label>Scheda</Label>
-            <Select
-              value={schedaId?.toString() ?? ""}
-              onValueChange={(v) => setSchedaId(Number(v))}
+            <Combobox
+              className="w-full"
+              aria-label="Scheda"
+              valore={schedaId?.toString() ?? ""}
+              onChange={(v) => setSchedaId(Number(v))}
               disabled={modalitaModifica}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Scegli una scheda" />
-              </SelectTrigger>
-              <SelectContent>
-                {schede?.map((s) => (
-                  <SelectItem key={s.id} value={s.id.toString()}>
-                    {s.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              opzioni={(schede ?? []).map((s) => ({ valore: s.id.toString(), etichetta: s.nome }))}
+              segnaposto="Scegli una scheda"
+              segnapostoRicerca="Cerca scheda…"
+              testoVuoto="Nessuna scheda trovata."
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="man-durata">Durata (min)</Label>

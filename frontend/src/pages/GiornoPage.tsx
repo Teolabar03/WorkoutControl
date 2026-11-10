@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { dataIt, numeroIt } from "@/lib/format"
 import { useGiorno } from "@/hooks/useCalendario"
@@ -43,19 +43,16 @@ function SchedaModificaRapida({ sessione }: { sessione: Sessione }) {
           value={durata}
           onChange={(e) => setDurata(e.target.value)}
         />
-        <Select value={schedaId} onValueChange={setSchedaId}>
-          <SelectTrigger className="w-full" aria-label="Scheda">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="0">Allenamento libero</SelectItem>
-            {schede?.map((s) => (
-              <SelectItem key={s.id} value={s.id.toString()}>
-                {s.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          className="w-full"
+          aria-label="Scheda"
+          valore={schedaId}
+          onChange={setSchedaId}
+          opzioniFisse={[{ valore: "0", etichetta: "Allenamento libero" }]}
+          opzioni={(schede ?? []).map((s) => ({ valore: s.id.toString(), etichetta: s.nome }))}
+          segnapostoRicerca="Cerca scheda…"
+          testoVuoto="Nessuna scheda trovata."
+        />
         <Input
           className="col-span-2"
           placeholder="Note"

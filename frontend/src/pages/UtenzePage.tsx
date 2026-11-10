@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { usePermessi } from "@/hooks/useAuth"
 import {
@@ -396,18 +397,16 @@ function DialogoUtente({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="utenza-workout">Workout</Label>
-              <Select value={workoutId} onValueChange={setWorkoutId}>
-                <SelectTrigger id="utenza-workout" className="w-full">
-                  <SelectValue placeholder="Scegli un workout" />
-                </SelectTrigger>
-                <SelectContent>
-                  {workout.map((w) => (
-                    <SelectItem key={w.id} value={String(w.id)}>
-                      {w.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                id="utenza-workout"
+                className="w-full"
+                valore={workoutId}
+                onChange={setWorkoutId}
+                opzioni={workout.map((w) => ({ valore: String(w.id), etichetta: w.nome }))}
+                segnaposto="Scegli un workout"
+                segnapostoRicerca="Cerca workout…"
+                testoVuoto="Nessun workout trovato."
+              />
             </div>
           </div>
           {descrizioneRuolo && <p className="-mt-2 text-xs text-muted-foreground">{descrizioneRuolo}</p>}

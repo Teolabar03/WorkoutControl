@@ -69,7 +69,9 @@ export function SuoniCard() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={BASE}>Predefinito</SelectItem>
-            {suoni?.map((s) => (
+            {[...(suoni ?? [])]
+              .sort((a, b) => a.nome.localeCompare(b.nome, "it", { sensitivity: "base" }))
+              .map((s) => (
               <SelectItem key={s.id} value={String(s.id)}>
                 {s.nome}
               </SelectItem>

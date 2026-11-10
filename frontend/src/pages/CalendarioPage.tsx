@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ChevronLeft, ChevronRight, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
 import { CalendarGrid } from "@/components/calendario/CalendarGrid"
 import { useMeseCalendario } from "@/hooks/useCalendario"
 import { useSchedeElenco } from "@/hooks/useSchede"
@@ -48,18 +48,16 @@ export function CalendarioPage() {
           </Button>
         ) : (
           <div className="flex w-full gap-2 sm:w-auto">
-            <Select value={schedaScelta} onValueChange={setSchedaScelta}>
-              <SelectTrigger className="flex-1 sm:w-[200px] sm:flex-none" aria-label="Scegli scheda">
-                <SelectValue placeholder="Allenamento libero" />
-              </SelectTrigger>
-              <SelectContent>
-                {schede?.map((s) => (
-                  <SelectItem key={s.id} value={s.id.toString()}>
-                    {s.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              className="min-w-0 flex-1 sm:w-[200px] sm:flex-none"
+              aria-label="Scegli scheda"
+              valore={schedaScelta}
+              onChange={setSchedaScelta}
+              opzioniFisse={[{ valore: "", etichetta: "Allenamento libero" }]}
+              opzioni={(schede ?? []).map((s) => ({ valore: s.id.toString(), etichetta: s.nome }))}
+              segnapostoRicerca="Cerca scheda…"
+              testoVuoto="Nessuna scheda trovata."
+            />
             <Button
               onClick={() => avvia.mutate(schedaScelta ? Number(schedaScelta) : null)}
               disabled={avvia.isPending}
