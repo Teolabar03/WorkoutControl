@@ -7,6 +7,7 @@ import {
   type TerminaSessione,
 } from "@/api/sessioni"
 import { ApiError } from "@/lib/api"
+import { fermaRecupero } from "@/lib/recupero"
 
 function erroreToast(err: unknown) {
   toast.error(err instanceof ApiError ? err.message : "Errore imprevisto.")
@@ -104,6 +105,10 @@ export function useTerminaSessione(sessioneId: number) {
   return useMutation({
     mutationFn: (dati: TerminaSessione) => sessioniApi.termina(sessioneId, dati),
     onSuccess: () => {
+      // Qui e non solo nella pagina: le callback passate a mutate() non
+      // scattano se il componente e' gia' smontato, e nell'APK una notifica
+      // di recupero rimasta in coda suonerebbe ad allenamento chiuso.
+      fermaRecupero(sessioneId)
       queryClient.invalidateQueries({ queryKey: ["context"] })
       queryClient.invalidateQueries({ queryKey: ["calendario"] })
       toast.success("Allenamento salvato.")

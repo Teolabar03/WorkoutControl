@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useImpostazioni } from "@/hooks/useImpostazioni"
 import { useSuono } from "@/hooks/useSuoni"
-import { NOTIFICA, annulla, canaleRecupero, disponibile, programma } from "@/lib/notifiche"
+import { canaleRecupero, disponibile } from "@/lib/notifiche"
+import { chiaveRecupero, fermaRecupero, programmaAvvisoRecupero } from "@/lib/recupero"
 import { beep, creaAudioContext, decodificaSuono, riproduciBuffer } from "@/lib/suoni"
 
 /**
@@ -23,7 +24,7 @@ import { beep, creaAudioContext, decodificaSuono, riproduciBuffer } from "@/lib/
  * lascia decodificare, resta il suono di base.
  */
 export function useRestTimer(sessioneId: number) {
-  const chiave = `workout.timer.${sessioneId}`
+  const chiave = chiaveRecupero(sessioneId)
 
   const [visibile, setVisibile] = useState(false)
   const [secondiRimanenti, setSecondiRimanenti] = useState(0)
@@ -162,21 +163,12 @@ export function useRestTimer(sessioneId: number) {
 
   /** Sposta la notifica di sistema alla nuova fine del recupero.
    *
-   *  Annulla sempre prima di riprogrammare: `avvia` viene richiamata anche a
-   *  timer già in corso — basta registrare un'altra serie — e resterebbe in
-   *  coda l'avviso del recupero precedente. Il canale si prepara in parallelo:
-   *  è lui a decidere il suono. */
+   *  `avvia` viene richiamata anche a timer gia' in corso — basta registrare
+   *  un'altra serie — e la nuova programmazione sostituisce quella precedente.
+   *  Ordine e annullamenti stanno in lib/recupero.ts. Il canale si prepara in
+   *  parallelo: e' lui a decidere il suono. */
   const riprogrammaAvviso = useCallback((fine: number) => {
-    if (!disponibile()) return
-    Promise.all([canaleRecupero(suonoRef.current), annulla(NOTIFICA.recuperoTimer)]).then(([canale]) =>
-      programma({
-        id: NOTIFICA.recuperoTimer,
-        titolo: "Recupero finito",
-        corpo: "Vai con la prossima serie.",
-        quando: new Date(fine),
-        canale,
-      })
-    )
+    programmaAvvisoRecupero(fine, canaleRecupero(suonoRef.current))
   }, [])
 
   const avvia = useCallback(
@@ -205,8 +197,7 @@ export function useRestTimer(sessioneId: number) {
   )
 
   const ferma = useCallback(() => {
-    localStorage.removeItem(chiave)
-    annulla(NOTIFICA.recuperoTimer)
+    fermaRecupero(sessioneId)
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
@@ -215,7 +206,7 @@ export function useRestTimer(sessioneId: number) {
     setFinito(false)
     suonatoRef.current = false
     rilasciaWakeLock()
-  }, [chiave, rilasciaWakeLock])
+  }, [sessioneId, rilasciaWakeLock])
 
   const piuTrenta = useCallback(() => {
     const fine = fineSalvata()

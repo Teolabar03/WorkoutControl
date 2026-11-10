@@ -1,12 +1,24 @@
+import { useEffect } from "react"
 import { Outlet } from "react-router-dom"
 import { Eye } from "lucide-react"
 import { useAppContext } from "@/hooks/useAppContext"
+import { fermaRecupero } from "@/lib/recupero"
 import { usePermessi } from "@/hooks/useAuth"
 import { TopBar } from "@/components/layout/TopBar"
 import { SessioneBanner } from "@/components/layout/SessioneBanner"
 
 export function Layout() {
   const { data: context } = useAppContext()
+
+  // Rete di sicurezza per il timer di recupero: se il server dice che non c'e'
+  // nessun allenamento aperto, nessun avviso deve restare in coda. Copre le
+  // chiusure che la pagina della sessione non vede (da un altro dispositivo,
+  // dal browser mentre l'APK e' in background, un annullamento perso).
+  const nessunaSessione = context !== undefined && context.sessione_corrente === null
+  useEffect(() => {
+    if (nessunaSessione) fermaRecupero()
+  }, [nessunaSessione])
+
   const { puoScrivere, utente } = usePermessi()
 
   return (
